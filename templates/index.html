@@ -1,0 +1,668 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>ShopEase | Electronics &amp; Everyday Tech</title>
+    <meta name="description" content="ShopEase offers affordable electronics and everyday technology accessories.">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    <link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+
+    <style>
+        /* GENERAL LAYOUT */
+        html {
+            scroll-behavior: smooth;
+            scroll-padding-top: 90px;
+        }
+
+        body {
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        img {
+            max-width: 100%;
+        }
+
+        /* NAVIGATION */
+        .navbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .main-nav {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            flex-wrap: wrap;
+        }
+
+        .nav-link {
+            text-decoration: none;
+        }
+
+        .logo img {
+            display: block;
+            width: auto;
+            max-width: 160px;
+            max-height: 65px;
+            object-fit: contain;
+        }
+
+        /* PRODUCTS */
+        .product-card {
+            min-width: 0;
+        }
+
+        .product-image {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .product-image img {
+            display: block;
+            width: 100%;
+            height: 220px;
+            object-fit: contain;
+        }
+
+        .product-info {
+            overflow-wrap: anywhere;
+        }
+
+        .stock-details {
+            font-size: 13px;
+            color: #64748b;
+        }
+
+        .add-button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .empty-products {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        /* ABOUT */
+        .about-section {
+            scroll-margin-top: 90px;
+        }
+
+        /* UPDATED FOOTER */
+        .footer {
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 50px 7% 20px;
+            margin-top: 60px;
+            border-top: 3px solid #22d3ee;
+        }
+
+        .footer-content {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 2fr 1fr 1.3fr;
+            gap: 45px;
+            padding-bottom: 35px;
+        }
+
+        .footer-brand,
+        .footer-links,
+        .footer-admin {
+            min-width: 0;
+        }
+
+        .footer-logo {
+            display: inline-block;
+            color: #ffffff;
+            font-size: 28px;
+            font-weight: 800;
+            text-decoration: none;
+            margin-bottom: 12px;
+        }
+
+        .footer-logo span {
+            color: #22d3ee;
+        }
+
+        .footer-brand p {
+            color: #cbd5e1;
+            margin: 8px 0;
+            line-height: 1.7;
+        }
+
+        .footer-brand .footer-description {
+            max-width: 340px;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+
+        .footer-links h3,
+        .footer-admin h3 {
+            color: #ffffff;
+            font-size: 16px;
+            margin: 5px 0 16px;
+        }
+
+        .footer-links {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .footer-links a {
+            color: #cbd5e1;
+            font-size: 14px;
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .footer-links a:hover {
+            color: #22d3ee;
+        }
+
+        .footer-admin p {
+            color: #94a3b8;
+            font-size: 14px;
+            line-height: 1.7;
+            margin-bottom: 16px;
+        }
+
+        .footer-admin .admin-access {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 15px;
+            margin-top: 0;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: #22d3ee;
+            font-size: 14px;
+            text-decoration: none;
+            transition: background 0.2s ease,
+                        border-color 0.2s ease;
+        }
+
+        .footer-admin .admin-access:hover {
+            background: #1e293b;
+            border-color: #22d3ee;
+        }
+
+        .footer a:focus-visible {
+            outline: 2px solid #22d3ee;
+            outline-offset: 4px;
+        }
+
+        .footer-bottom {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding-top: 20px;
+            border-top: 1px solid #334155;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px 20px;
+        }
+
+        .footer-bottom p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        /* TABLET */
+        @media (max-width: 800px) {
+            .footer-content {
+                grid-template-columns: 1fr 1fr;
+                gap: 30px;
+            }
+
+            .footer-brand {
+                grid-column: 1 / -1;
+            }
+        }
+
+        /* MOBILE */
+        @media (max-width: 700px) {
+            .navbar {
+                align-items: flex-start;
+            }
+
+            .main-nav {
+                width: 100%;
+                gap: 12px;
+            }
+
+            .nav-link {
+                font-size: 14px;
+            }
+
+            .product-image img {
+                height: 180px;
+            }
+        }
+
+        @media (max-width: 500px) {
+            .footer {
+                padding: 35px 6% 18px;
+                margin-top: 40px;
+            }
+
+            .footer-content {
+                grid-template-columns: 1fr;
+                gap: 28px;
+                padding-bottom: 25px;
+            }
+
+            .footer-brand {
+                grid-column: auto;
+            }
+
+            .footer-logo {
+                font-size: 25px;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- CUSTOMER NAVIGATION -->
+   
+<header class="shop-header">
+    <div class="shop-header-main">
+        <a href="{{ url_for('home') }}" class="shop-logo" aria-label="ShopEase home">
+            <img
+                src="{{ url_for('static', filename='images/shopease-logo.png') }}"
+                alt="ShopEase">
+        </a>
+
+    
+
+<!-- CUSTOMER NAVIGATION -->
+<header class="shop-header">
+
+    <div class="shop-header-main">
+
+
+        <!-- PRODUCT SEARCH -->
+        <form class="shop-search" id="product-search-form" role="search">
+            <label class="sr-only" for="product-search">
+                Search products
+            </label>
+
+            <input
+                type="search"
+                id="product-search"
+                name="q"
+                placeholder="Search products and accessories..."
+                autocomplete="off">
+
+            <button type="submit" aria-label="Search products">
+                <i class="fa-solid fa-magnifying-glass"
+                   aria-hidden="true"></i>
+                <span>Search</span>
+            </button>
+        </form>
+
+        <!-- TRACK ORDER -->
+        <a href="{{ url_for('track_order') }}" class="header-action">
+            <span class="action-icon">
+                <i class="fa-solid fa-truck-fast"
+                   aria-hidden="true"></i>
+            </span>
+
+            <span class="action-label">
+                <small>Need an update?</small>
+                <strong>Track Order</strong>
+            </span>
+        </a>
+
+        <!-- SHOPPING CART -->
+        <a href="{{ url_for('cart_page') }}" class="header-cart">
+            <span class="action-icon">
+                <i class="fa-solid fa-cart-shopping"
+                   aria-hidden="true"></i>
+            </span>
+
+            <span class="action-label">
+                <small>Your items</small>
+                <strong>My Cart</strong>
+            </span>
+
+            <span id="cart-count" class="cart-count">0</span>
+        </a>
+
+    </div>
+
+    <!-- MAIN NAVIGATION -->
+    <nav class="shop-nav" aria-label="Main navigation">
+        <div class="shop-nav-inner">
+
+            <a href="{{ url_for('home') }}"
+               class="shop-nav-link active">
+                Home
+            </a>
+
+            <a href="#products" class="shop-nav-link">
+                Shop All
+            </a>
+
+            <a href="#about" class="shop-nav-link">
+                About ShopEase
+            </a>
+
+            <span class="nav-tagline">
+                Smart finds. Everyday value.
+            </span>
+
+        </div>
+    </nav>
+
+</header>
+
+
+    <!-- HERO SECTION -->
+    <section class="hero">
+        <div class="hero-content">
+            <p class="eyebrow">SMART FINDS. EVERYDAY VALUE.</p>
+
+            <h1>
+                Upgrade your<br>
+                <span>everyday tech.</span>
+            </h1>
+
+            <p class="hero-description">
+                Discover practical tech essentials for your desk,
+                studies, work, and everyday life.
+            </p>
+
+            <a href="#products" class="primary-button">
+                Explore Products →
+            </a>
+
+            <div class="hero-benefits">
+                <span>✓ Everyday essentials</span>
+                <span>✓ Affordable prices</span>
+                <span>✓ Easy checkout</span>
+            </div>
+        </div>
+
+        <div class="hero-image">
+            <img
+                src="https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&amp;fit=crop&amp;w=1000&amp;q=85"
+                alt="Laptop and technology workspace"
+                fetchpriority="high">
+
+            <div class="image-label">
+                <span>TECH FOR EVERYDAY</span>
+                <strong>Work smarter. Live easier.</strong>
+            </div>
+        </div>
+    </section>
+
+   <!-- BENEFITS -->
+<section class="benefits" aria-label="ShopEase benefits">
+
+    <div class="benefit">
+        <span class="benefit-icon">
+            <i class="fa-solid fa-boxes-stacked"></i>
+        </span>
+        <div>
+            <h3>Practical Products</h3>
+            <p>Useful essentials for everyday needs.</p>
+        </div>
+    </div>
+
+    <div class="benefit">
+        <span class="benefit-icon">
+            <i class="fa-solid fa-tags"></i>
+        </span>
+        <div>
+            <h3>Budget Friendly</h3>
+            <p>Clear prices for every product.</p>
+        </div>
+    </div>
+
+    <div class="benefit">
+        <span class="benefit-icon">
+            <i class="fa-solid fa-bag-shopping"></i>
+        </span>
+        <div>
+            <h3>Easy Shopping</h3>
+            <p>Simple shopping and convenient checkout.</p>
+        </div>
+    </div>
+
+</section>
+
+    <!-- PRODUCT CATALOG -->
+    <main id="products" class="products-section">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">SHOP OUR COLLECTION</p>
+                <h2>Everyday Tech Essentials</h2>
+                <p class="section-description">
+                    Reliable accessories for your workspace and daily routine.
+                </p>
+            </div>
+
+            <span class="product-count">
+                {{ products|length }} products
+            </span>
+        </div>
+
+        <div class="product-grid">
+            {% for product in products %}
+
+                {% set pid = product['product_id'] if 'product_id' in product.keys() else product['id'] %}
+                {% set pname = product['name'] %}
+                {% set price = product['price']|float %}
+                {% set stock = product['stock']|int %}
+                {% set description = product['description'] if 'description' in product.keys() and product['description'] else 'A practical everyday tech essential.' %}
+                {% set pname_lower = pname|lower %}
+
+                <article class="product-card">
+                    <div class="product-image">
+
+                        {% if 'mouse' in pname_lower %}
+                            <img
+                                src="https://images.unsplash.com/photo-1527814050087-3793815479db?auto=format&amp;fit=crop&amp;w=700&amp;q=85"
+                                alt="{{ pname }}"
+                                loading="lazy">
+
+                        {% elif 'keyboard' in pname_lower %}
+                            <img
+                                src="https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&amp;fit=crop&amp;w=700&amp;q=85"
+                                alt="{{ pname }}"
+                                loading="lazy">
+
+                        {% elif 'headphone' in pname_lower %}
+                            <img
+                                src="https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&amp;fit=crop&amp;w=700&amp;q=85"
+                                alt="{{ pname }}"
+                                loading="lazy">
+
+                        {% elif 'flash drive' in pname_lower or 'usb' in pname_lower %}
+                            <img
+                                src="{{ url_for('static', filename='images/flash-drive.jpg') }}"
+                                alt="{{ pname }}"
+                                loading="lazy">
+
+                        {% elif 'stand' in pname_lower %}
+                            <img
+                                src="{{ url_for('static', filename='images/laptop-stand.jpg') }}"
+                                alt="{{ pname }}"
+                                loading="lazy">
+
+                        {% else %}
+                            <img
+                                src="{{ url_for('static', filename='images/shopease-logo.png') }}"
+                                alt="{{ pname }}"
+                                loading="lazy">
+                        {% endif %}
+
+                        {% if stock > 0 %}
+                            <span class="stock-badge available">In Stock</span>
+                        {% else %}
+                            <span class="stock-badge unavailable">Sold Out</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="product-info">
+                        <p class="product-category">
+                            {% if 'mouse' in pname_lower or 'keyboard' in pname_lower %}
+                                COMPUTER ACCESSORIES
+                            {% elif 'headphone' in pname_lower %}
+                                AUDIO ACCESSORIES
+                            {% elif 'flash drive' in pname_lower or 'usb' in pname_lower %}
+                                STORAGE ACCESSORIES
+                            {% elif 'stand' in pname_lower %}
+                                WORKSPACE ACCESSORIES
+                            {% else %}
+                                TECH ACCESSORIES
+                            {% endif %}
+                        </p>
+
+                        <h3>{{ pname }}</h3>
+
+                        <p class="description">{{ description }}</p>
+
+                        <p class="stock-details">
+                            {% if stock > 0 %}
+                                {{ stock }} available
+                            {% else %}
+                                Currently unavailable
+                            {% endif %}
+                        </p>
+
+                        <div class="product-footer">
+                            <div class="price-container">
+                                <span class="price">
+                                    ₱{{ "%.2f"|format(price) }}
+                                </span>
+                            </div>
+
+                            <button
+                                type="button"
+                                class="add-button"
+                                data-id="{{ pid }}"
+                                data-name="{{ pname }}"
+                                data-price="{{ price }}"
+                                data-stock="{{ stock }}"
+                                {% if stock <= 0 %}disabled{% endif %}
+                                aria-label="Add {{ pname }} to cart">
+
+                                {% if stock > 0 %}
+                                    Add to Cart +
+                                {% else %}
+                                    Sold Out
+                                {% endif %}
+                            </button>
+                        </div>
+                    </div>
+                </article>
+
+            {% else %}
+                <div class="empty-products">
+                    <h3>No products available</h3>
+                    <p>Please check back later.</p>
+                </div>
+            {% endfor %}
+        </div>
+    </main>
+
+    <!-- ABOUT SECTION -->
+    <section id="about" class="about-section">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">ABOUT SHOEASE</p>
+                <h2>Technology made practical.</h2>
+            </div>
+        </div>
+
+        <p>
+            ShopEase is an e-commerce project focused on affordable,
+            practical electronics and everyday technology accessories.
+            Our goal is to make browsing products, managing a shopping
+            cart, checking out, and tracking orders simple for customers.
+        </p>
+    </section>
+
+    <!-- UPDATED FOOTER -->
+    <footer class="footer">
+        <div class="footer-content">
+
+            <div class="footer-brand">
+                <a href="{{ url_for('home') }}" class="footer-logo">
+                    ShopEase<span>.</span>
+                </a>
+
+                <p>Smart finds. Everyday value.</p>
+
+                <p class="footer-description">
+                    Affordable electronics and practical tech essentials
+                    for your everyday needs.
+                </p>
+            </div>
+
+            <div class="footer-links">
+                <h3>Quick Links</h3>
+                <a href="{{ url_for('home') }}">Home</a>
+                <a href="#products">Products</a>
+                <a href="#about">About Us</a>
+                <a href="{{ url_for('cart_page') }}">My Cart</a>
+                <a href="{{ url_for('track_order') }}">Track Order</a>
+            </div>
+
+            <div class="footer-admin">
+                <h3>Administration</h3>
+
+                <p>
+                    Manage orders and monitor store activity.
+                </p>
+
+                <a class="admin-access" href="{{ url_for('admin_login') }}">
+                    <i class="fa-solid fa-gear" aria-hidden="true"></i>
+                            Admin Login
+                </a>
+            </div>
+        </div>
+
+        <div class="footer-bottom">
+            <p>
+                &copy; {{ now_year if now_year is defined else 2026 }}
+                ShopEase. All rights reserved.
+            </p>
+
+            <p>Made for everyday tech needs.</p>
+        </div>
+    </footer>
+
+    <!-- SHOPPING CART SCRIPT -->
+    <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
+
+</body>
+</html>

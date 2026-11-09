@@ -1,0 +1,75 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login | ShopEase</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/style.css') }}">
+
+    <style>
+        .admin-login {
+            max-width: 420px;
+            margin: 70px auto;
+            padding: 30px;
+            background: white;
+            color: #172033;
+            border-radius: 14px;
+            box-shadow: 0 8px 30px #00000012;
+        }
+
+        .admin-login input,
+        .admin-login button {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px;
+            margin: 12px 0;
+            border-radius: 8px;
+        }
+
+        .admin-login input {
+            border: 1px solid #cbd5e1;
+        }
+
+        .admin-login button {
+            background: #0d9488;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        .login-error {
+            color: #b91c1c;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="admin-login">
+        <h1>Admin Login</h1>
+        <p>Sign in to manage ShopEase orders.</p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <p class="login-error" role="alert">{{ message }}</p>
+            {% endfor %}
+        {% endwith %}
+
+        <form method="post" action="{{ url_for('admin_login') }}">
+            <label for="username">Username</label>
+            <input id="username" name="username"
+                   type="text" autocomplete="username" required>
+
+            <label for="password">Password</label>
+            <input id="password" name="password"
+                   type="password" autocomplete="current-password" required>
+
+            <button type="submit">Log In</button>
+        </form>
+
+        <a href="{{ url_for('home') }}">Back to Store</a>
+    </main>
+</body>
+</html>

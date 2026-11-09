@@ -1,0 +1,402 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Track Order | ShopEase</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/style.css') }}">
+
+    <style>
+        .tracking-page {
+            max-width: 850px;
+            margin: 50px auto;
+            padding: 25px;
+            color: #172033;
+        }
+
+        .tracking-card {
+            background: #ffffff;
+            color: #172033;
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 8px 30px #00000012;
+        }
+
+        .tracking-card h1 {
+            margin-top: 0;
+            font-size: 30px;
+        }
+
+        .tracking-intro {
+            color: #64748b;
+            line-height: 1.7;
+        }
+
+        .tracking-form {
+            display: flex;
+            gap: 10px;
+            margin: 22px 0;
+        }
+
+        .tracking-form input {
+            flex: 1;
+            min-width: 0;
+            padding: 13px;
+            border: 1px solid #ccd3df;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .tracking-form button {
+            padding: 13px 20px;
+            background: #0d9488;
+            color: #ffffff;
+            border: 0;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .tracking-form button:hover {
+            background: #0f766e;
+        }
+
+        .tracking-form input:focus-visible,
+        .tracking-form button:focus-visible,
+        .back-to-store:focus-visible {
+            outline: 2px solid #0d9488;
+            outline-offset: 3px;
+        }
+
+        .tracking-result {
+            margin-top: 25px;
+            line-height: 1.8;
+            overflow-wrap: anywhere;
+        }
+
+        .tracking-status {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            background: #ccfbf1;
+            color: #115e59;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .tracking-status.cancelled {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .tracking-details {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 10px;
+        }
+
+        .tracking-details p {
+            margin: 8px 0;
+        }
+
+        .progress-list {
+            list-style: none;
+            padding: 0 0 0 5px;
+            margin-top: 20px;
+        }
+
+        .progress-list li {
+            position: relative;
+            margin: 0;
+            padding: 12px 15px 12px 30px;
+            border-left: 3px solid #cbd5e1;
+            color: #64748b;
+        }
+
+        .progress-list li::before {
+            content: "";
+            position: absolute;
+            left: -8px;
+            top: 18px;
+            width: 13px;
+            height: 13px;
+            border-radius: 50%;
+            background: #cbd5e1;
+        }
+
+        .progress-list li.completed {
+            border-left-color: #0d9488;
+            color: #115e59;
+        }
+
+        .progress-list li.completed::before {
+            background: #0d9488;
+        }
+
+        .progress-list li.current {
+            font-weight: 700;
+            color: #0f766e;
+        }
+
+        .tracking-error {
+            padding: 12px 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .tracking-note {
+            margin-top: 20px;
+            color: #64748b;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .back-to-store {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 11px 16px;
+            background: #172033;
+            color: #ffffff;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .back-to-store:hover {
+            background: #334155;
+        }
+
+        .tracking-empty {
+            margin-top: 20px;
+            padding: 18px;
+            background: #f8fafc;
+            border-radius: 10px;
+            color: #64748b;
+        }
+
+        @media (max-width: 560px) {
+            .tracking-page {
+                margin: 20px auto;
+                padding: 12px;
+            }
+
+            .tracking-card {
+                padding: 20px;
+            }
+
+            .tracking-card h1 {
+                font-size: 25px;
+            }
+
+            .tracking-form {
+                flex-direction: column;
+            }
+
+            .tracking-form button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Customer Navigation -->
+    <header class="navbar">
+        <a class="logo"
+           href="{{ url_for('home') }}"
+           aria-label="ShopEase Home">
+            <img
+                src="{{ url_for('static', filename='images/shopease-logo.png') }}"
+                alt="ShopEase Logo">
+        </a>
+
+        <nav class="main-nav" aria-label="Customer navigation">
+            <a href="{{ url_for('home') }}" class="nav-link">
+                Home
+            </a>
+
+            <a href="{{ url_for('home') }}#products" class="nav-link">
+                Products
+            </a>
+
+            <a href="{{ url_for('cart_page') }}" class="nav-link">
+                🛒 My Cart
+            </a>
+
+            <a href="{{ url_for('track_order') }}"
+               class="nav-link"
+               aria-current="page">
+                📦 Track Order
+            </a>
+        </nav>
+    </header>
+
+    <!-- Order Tracking -->
+    <main class="tracking-page">
+        <div class="tracking-card">
+
+            <h1>Track Your Order</h1>
+
+            <p class="tracking-intro">
+                Enter the order number you received after checkout
+                to view your order details and delivery progress.
+            </p>
+
+            <!-- Search Form -->
+            <form class="tracking-form"
+                  method="get"
+                  action="{{ url_for('track_order') }}">
+
+                <input
+                    type="number"
+                    name="order_id"
+                    min="1"
+                    step="1"
+                    placeholder="Enter order number (e.g. 1)"
+                    aria-label="Order number"
+                    value="{{ order_id or '' }}"
+                    required>
+
+                <button type="submit">
+                    Track Order
+                </button>
+            </form>
+
+            <!-- Error Message -->
+            {% if error %}
+                <p class="tracking-error" role="alert">
+                    {{ error }}
+                </p>
+            {% endif %}
+
+            <!-- Order Result -->
+            {% if order %}
+
+                {% set oid = order.get('order_id', order.get('id', order_id or '')) %}
+                {% set total_amount = order.get('total', order.get('total_amount', 0)) %}
+                {% set delivery = order.get('delivery_status') or 'Pending' %}
+                {% set payment = order.get('payment_status') or order.get('status') or 'Not available' %}
+                {% set customer = order.get('customer_name') or 'Guest' %}
+                {% set order_date = order.get('created_at') or 'Not available' %}
+                {% set current_delivery = delivery|string|lower|trim %}
+
+                {% set progress_steps = ['pending', 'processing', 'shipped', 'delivered'] %}
+
+                {% if current_delivery in progress_steps %}
+                    {% set current_index = progress_steps.index(current_delivery) %}
+                {% else %}
+                    {% set current_index = -1 %}
+                {% endif %}
+
+                <section class="tracking-result"
+                         aria-label="Order details">
+
+                    <h2>Order #{{ oid }}</h2>
+
+                    <div class="tracking-details">
+
+                        <p>
+                            <strong>Customer:</strong>
+                            {{ customer }}
+                        </p>
+
+                        <p>
+                            <strong>Order Date:</strong>
+                            {{ order_date }}
+                        </p>
+
+                        <p>
+                            <strong>Total Amount:</strong>
+                            ₱{{ "%.2f"|format(total_amount|float) }}
+                        </p>
+
+                        <p>
+                            <strong>Payment Status:</strong>
+                            <span class="tracking-status">
+                                {{ payment }}
+                            </span>
+                        </p>
+
+                        <p>
+                            <strong>Delivery Status:</strong>
+
+                            <span class="tracking-status {% if current_delivery == 'cancelled' %}cancelled{% endif %}">
+                                {{ delivery }}
+                            </span>
+                        </p>
+
+                    </div>
+
+                    <h3>Delivery Progress</h3>
+
+                    {% if current_delivery == 'cancelled' %}
+
+                        <p class="tracking-error" role="status">
+                            This order has been cancelled.
+                            Please contact the store if you need assistance.
+                        </p>
+
+                    {% elif current_index >= 0 %}
+
+                        <ol class="progress-list">
+                            {% for step in progress_steps %}
+
+                                <li class="{% if loop.index0 < current_index %}completed{% elif loop.index0 == current_index %}completed current{% endif %}">
+
+                                    {% if loop.index0 == current_index %}
+                                        {{ step|title }} — Current Status
+                                    {% elif loop.index0 < current_index %}
+                                        {{ step|title }} — Completed
+                                    {% else %}
+                                        {{ step|title }}
+                                    {% endif %}
+
+                                </li>
+
+                            {% endfor %}
+                        </ol>
+
+                    {% else %}
+
+                        <p class="tracking-empty">
+                            Delivery progress is not available for this status yet.
+                            Please check again later or contact the store.
+                        </p>
+
+                    {% endif %}
+
+                    <p class="tracking-note">
+                        Delivery progress updates when the store changes
+                        your order's delivery status.
+                    </p>
+
+                    <a href="{{ url_for('home') }}"
+                       class="back-to-store">
+                        ← Continue Shopping
+                    </a>
+
+                </section>
+
+            {% elif not error and request.args.get('order_id') %}
+
+                <p class="tracking-empty">
+                    No order details are available for that order number.
+                    Please check the number and try again.
+                </p>
+
+            {% endif %}
+
+        </div>
+    </main>
+
+</body>
+</html>

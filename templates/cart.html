@@ -1,0 +1,367 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Your Cart | ShopEase</title>
+
+    <meta name="description"
+          content="Review your ShopEase shopping cart and place your mock order.">
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/style.css') }}">
+
+    <style>
+        .cart-page {
+            max-width: 1100px;
+            margin: 40px auto;
+            padding: 20px;
+            color: #172033;
+        }
+
+        .cart-page h1 {
+            margin: 5px 0 25px;
+        }
+
+        .cart-items {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin: 25px 0;
+        }
+
+        .empty-cart {
+            padding: 35px 20px;
+            background: #ffffff;
+            border-radius: 12px;
+            text-align: center;
+            color: #64748b;
+            box-shadow: 0 5px 20px #0000000d;
+        }
+
+        .empty-cart h2 {
+            color: #172033;
+            margin-top: 0;
+        }
+
+        .empty-cart a {
+            display: inline-block;
+            margin-top: 12px;
+            padding: 12px 18px;
+            border-radius: 8px;
+            background: #0d9488;
+            color: #ffffff;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .empty-cart a:hover {
+            background: #0f766e;
+        }
+
+        .cart-summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin: 25px 0;
+            padding: 25px;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 5px 20px #0000000d;
+        }
+
+        .cart-summary h2 {
+            margin-top: 0;
+        }
+
+        .cart-summary p {
+            color: #64748b;
+        }
+
+        .cart-summary #cart-total {
+            color: #0f766e;
+            font-size: 24px;
+        }
+
+        .checkout-section {
+            margin-top: 30px;
+            padding: 28px;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 5px 20px #0000000d;
+        }
+
+        .checkout-section h2 {
+            margin-top: 0;
+        }
+
+        #checkout-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        #checkout-form label {
+            margin-top: 8px;
+            font-weight: 600;
+            color: #334155;
+        }
+
+        #checkout-form input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 13px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        #checkout-form input:focus-visible {
+            outline: 2px solid #0d9488;
+            outline-offset: 2px;
+        }
+
+        #checkout-button {
+            width: 100%;
+            margin-top: 10px;
+            border: none;
+            cursor: pointer;
+        }
+
+        #checkout-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .payment-note {
+            margin: 15px 0 5px;
+            padding: 12px;
+            border-radius: 8px;
+            background: #f0fdfa;
+            color: #115e59;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .checkout-message {
+            margin-top: 18px;
+            line-height: 1.6;
+            overflow-wrap: anywhere;
+        }
+
+        .checkout-message a {
+            color: #0f766e;
+            font-weight: 600;
+        }
+
+        .checkout-message:empty {
+            display: none;
+        }
+
+        .checkout-message.error {
+            padding: 12px;
+            border-radius: 8px;
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .checkout-message.success {
+            padding: 12px;
+            border-radius: 8px;
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .cart-navigation {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        @media (max-width: 600px) {
+            .cart-page {
+                margin: 20px auto;
+                padding: 14px;
+            }
+
+            .cart-summary,
+            .checkout-section {
+                padding: 20px;
+            }
+
+            .cart-summary {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .cart-navigation {
+                gap: 10px;
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Customer Navigation -->
+    <header class="navbar">
+        <a href="{{ url_for('home') }}"
+           class="logo"
+           aria-label="ShopEase Home">
+            <img
+                src="{{ url_for('static', filename='images/shopease-logo.png') }}"
+                alt="ShopEase Logo">
+        </a>
+
+        <nav class="main-nav" aria-label="Customer navigation">
+            <a href="{{ url_for('home') }}"
+               class="nav-link">
+                Home
+            </a>
+
+            <a href="{{ url_for('home') }}#products"
+               class="nav-link">
+                Products
+            </a>
+
+            <a href="{{ url_for('cart_page') }}"
+               class="nav-link"
+               aria-current="page">
+                🛒 My Cart
+                <span id="cart-count" class="cart-count">0</span>
+            </a>
+
+            <a href="{{ url_for('track_order') }}"
+               class="nav-link">
+                📦 Track Order
+            </a>
+        </nav>
+    </header>
+
+    <!-- Shopping Cart -->
+    <main class="cart-page">
+
+        <p class="eyebrow">YOUR SHOPPING BAG</p>
+        <h1>Your Cart</h1>
+
+        <p>Review your selected products before checkout.</p>
+
+        <!-- JavaScript renders cart products here -->
+        <div id="cart-items" class="cart-items" aria-live="polite">
+        </div>
+
+        <!-- Empty Cart Message -->
+        <noscript>
+            <p class="empty-cart">
+                JavaScript is required to display your cart and complete checkout.
+                Please enable JavaScript in your browser.
+            </p>
+        </noscript>
+
+        <!-- Order Summary -->
+        <section class="cart-summary" aria-label="Order summary">
+            <div>
+                <h2>Order Summary</h2>
+                <p>Check your items and total before placing your order.</p>
+            </div>
+
+            <p>
+                Total:
+                <strong id="cart-total">₱0.00</strong>
+            </p>
+        </section>
+
+        <!-- Checkout Section -->
+        <section class="checkout-section">
+            <h2>Customer Information</h2>
+
+            <p>
+                Enter your details so your order can be recorded.
+            </p>
+
+            <form id="checkout-form">
+
+                <label for="name">Full Name</label>
+                <input
+                    id="name"
+                    name="name"
+                    type="text"
+                    autocomplete="name"
+                    placeholder="Enter your full name"
+                    maxlength="100"
+                    required>
+
+                <label for="email">Email Address</label>
+                <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    autocomplete="email"
+                    placeholder="you@example.com"
+                    maxlength="254"
+                    required>
+
+                <label for="phone">Phone Number (optional)</label>
+                <input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    autocomplete="tel"
+                    placeholder="Enter your phone number"
+                    maxlength="30">
+
+                <p class="payment-note">
+                    <strong>Mock Payment:</strong>
+                    This is a student project. Checkout simulates payment
+                    processing and does not charge real money.
+                </p>
+
+                <button
+                    id="checkout-button"
+                    class="primary-button"
+                    type="submit">
+                    Place Mock Order
+                </button>
+
+            </form>
+
+            <!-- Checkout Feedback -->
+            <div
+                id="checkout-message"
+                class="checkout-message"
+                role="status"
+                aria-live="polite">
+            </div>
+        </section>
+
+        <!-- Continue Shopping -->
+        <a href="{{ url_for('home') }}" class="back-to-store">
+            ← Continue Shopping
+        </a>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="site-footer">
+        <a href="{{ url_for('home') }}"
+           class="logo footer-logo"
+           aria-label="ShopEase Home">
+            <img
+                src="{{ url_for('static', filename='images/shopease-logo.png') }}"
+                alt="ShopEase Logo">
+        </a>
+
+        <p>Everyday technology, made simple.</p>
+        <p>© 2026 ShopEase | Student OOP Project</p>
+    </footer>
+
+    <!-- JavaScript -->
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+
+</body>
+</html>
