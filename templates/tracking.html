@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Track Order | ShopEase</title>
+    <title>Order Tracking | ShopEase</title>
 
     <link rel="stylesheet"
           href="{{ url_for('static', filename='css/style.css') }}">
@@ -20,7 +20,6 @@
 
         .tracking-card {
             background: #ffffff;
-            color: #172033;
             padding: 30px;
             border-radius: 16px;
             box-shadow: 0 8px 30px #00000012;
@@ -36,47 +35,21 @@
             line-height: 1.7;
         }
 
-        .tracking-form {
-            display: flex;
-            gap: 10px;
-            margin: 22px 0;
-        }
-
-        .tracking-form input {
-            flex: 1;
-            min-width: 0;
-            padding: 13px;
-            border: 1px solid #ccd3df;
-            border-radius: 8px;
-            font-size: 16px;
-        }
-
-        .tracking-form button {
-            padding: 13px 20px;
-            background: #0d9488;
-            color: #ffffff;
-            border: 0;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 15px;
-            font-weight: 600;
-        }
-
-        .tracking-form button:hover {
-            background: #0f766e;
-        }
-
-        .tracking-form input:focus-visible,
-        .tracking-form button:focus-visible,
-        .back-to-store:focus-visible {
-            outline: 2px solid #0d9488;
-            outline-offset: 3px;
-        }
-
         .tracking-result {
             margin-top: 25px;
             line-height: 1.8;
             overflow-wrap: anywhere;
+        }
+
+        .tracking-details {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 10px;
+        }
+
+        .tracking-details p {
+            margin: 8px 0;
         }
 
         .tracking-status {
@@ -92,17 +65,6 @@
         .tracking-status.cancelled {
             background: #fee2e2;
             color: #991b1b;
-        }
-
-        .tracking-details {
-            margin-top: 20px;
-            padding: 20px;
-            background: #f8fafc;
-            border-radius: 10px;
-        }
-
-        .tracking-details p {
-            margin: 8px 0;
         }
 
         .progress-list {
@@ -152,11 +114,107 @@
             color: #991b1b;
         }
 
+        .tracking-empty {
+            margin-top: 20px;
+            padding: 18px;
+            background: #f8fafc;
+            border-radius: 10px;
+            color: #64748b;
+        }
+
         .tracking-note {
             margin-top: 20px;
             color: #64748b;
             font-size: 14px;
             line-height: 1.6;
+        }
+
+        /* QR CODE SECTION */
+
+        .tracking-qr-section {
+            margin-top: 30px;
+            padding: 25px;
+            text-align: center;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+        }
+
+        .tracking-qr-section h3 {
+            margin-top: 0;
+            color: #172033;
+        }
+
+        .tracking-qr-section p {
+            color: #64748b;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .tracking-qr-box {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 20px auto;
+            padding: 15px;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            min-height: 220px;
+            max-width: 250px;
+            overflow: hidden;
+        }
+
+        #trackingQRCode {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #trackingQRCode img,
+        #trackingQRCode canvas {
+            display: block;
+            max-width: 100%;
+            height: auto;
+        }
+
+        .tracking-qr-actions {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .tracking-qr-button {
+            display: inline-block;
+            padding: 11px 16px;
+            border: none;
+            border-radius: 8px;
+            background: #0f766e;
+            color: #ffffff;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.2s ease;
+        }
+
+        .tracking-qr-button:hover {
+            background: #115e59;
+        }
+
+        .tracking-qr-button.secondary {
+            background: #172033;
+        }
+
+        .tracking-qr-button.secondary:hover {
+            background: #334155;
+        }
+
+        .tracking-qr-message {
+            margin-top: 12px;
+            font-size: 13px;
+            color: #0f766e;
         }
 
         .back-to-store {
@@ -174,14 +232,6 @@
             background: #334155;
         }
 
-        .tracking-empty {
-            margin-top: 20px;
-            padding: 18px;
-            background: #f8fafc;
-            border-radius: 10px;
-            color: #64748b;
-        }
-
         @media (max-width: 560px) {
             .tracking-page {
                 margin: 20px auto;
@@ -196,12 +246,17 @@
                 font-size: 25px;
             }
 
-            .tracking-form {
+            .tracking-qr-section {
+                padding: 18px;
+            }
+
+            .tracking-qr-actions {
                 flex-direction: column;
             }
 
-            .tracking-form button {
+            .tracking-qr-button {
                 width: 100%;
+                box-sizing: border-box;
             }
         }
     </style>
@@ -211,15 +266,19 @@
 
     <!-- Customer Navigation -->
     <header class="navbar">
+
         <a class="logo"
            href="{{ url_for('home') }}"
            aria-label="ShopEase Home">
+
             <img
                 src="{{ url_for('static', filename='images/shopease-logo.png') }}"
                 alt="ShopEase Logo">
+
         </a>
 
         <nav class="main-nav" aria-label="Customer navigation">
+
             <a href="{{ url_for('home') }}" class="nav-link">
                 Home
             </a>
@@ -232,64 +291,51 @@
                 🛒 My Cart
             </a>
 
-            <a href="{{ url_for('track_order') }}"
-               class="nav-link"
-               aria-current="page">
-                📦 Track Order
-            </a>
         </nav>
+
     </header>
 
-    <!-- Order Tracking -->
+
+    <!-- Customer Order Tracking -->
     <main class="tracking-page">
+
         <div class="tracking-card">
 
             <h1>Track Your Order</h1>
 
             <p class="tracking-intro">
-                Enter the order number you received after checkout
-                to view your order details and delivery progress.
+                Welcome to ShopEase order tracking.
+                View your order information and delivery progress below.
             </p>
 
-            <!-- Search Form -->
-            <form class="tracking-form"
-                  method="get"
-                  action="{{ url_for('track_order') }}">
-
-                <input
-                    type="number"
-                    name="order_id"
-                    min="1"
-                    step="1"
-                    placeholder="Enter order number (e.g. 1)"
-                    aria-label="Order number"
-                    value="{{ order_id or '' }}"
-                    required>
-
-                <button type="submit">
-                    Track Order
-                </button>
-            </form>
 
             <!-- Error Message -->
             {% if error %}
+
                 <p class="tracking-error" role="alert">
                     {{ error }}
                 </p>
+
             {% endif %}
 
-            <!-- Order Result -->
+
+            <!-- Order Information -->
             {% if order %}
 
-                {% set oid = order.get('order_id', order.get('id', order_id or '')) %}
                 {% set total_amount = order.get('total', order.get('total_amount', 0)) %}
+
                 {% set delivery = order.get('delivery_status') or 'Pending' %}
+
                 {% set payment = order.get('payment_status') or order.get('status') or 'Not available' %}
+
                 {% set customer = order.get('customer_name') or 'Guest' %}
+
                 {% set order_date = order.get('created_at') or 'Not available' %}
+
                 {% set current_delivery = delivery|string|lower|trim %}
 
                 {% set progress_steps = ['pending', 'processing', 'shipped', 'delivered'] %}
+
 
                 {% if current_delivery in progress_steps %}
                     {% set current_index = progress_steps.index(current_delivery) %}
@@ -297,10 +343,11 @@
                     {% set current_index = -1 %}
                 {% endif %}
 
+
                 <section class="tracking-result"
                          aria-label="Order details">
 
-                    <h2>Order #{{ oid }}</h2>
+                    <h2>Order Successfully Found!</h2>
 
                     <div class="tracking-details">
 
@@ -321,6 +368,7 @@
 
                         <p>
                             <strong>Payment Status:</strong>
+
                             <span class="tracking-status">
                                 {{ payment }}
                             </span>
@@ -336,67 +384,248 @@
 
                     </div>
 
+
+                    <!-- Delivery Progress -->
                     <h3>Delivery Progress</h3>
 
                     {% if current_delivery == 'cancelled' %}
 
                         <p class="tracking-error" role="status">
                             This order has been cancelled.
-                            Please contact the store if you need assistance.
+                            Please contact ShopEase for assistance.
                         </p>
 
                     {% elif current_index >= 0 %}
 
                         <ol class="progress-list">
+
                             {% for step in progress_steps %}
 
                                 <li class="{% if loop.index0 < current_index %}completed{% elif loop.index0 == current_index %}completed current{% endif %}">
 
                                     {% if loop.index0 == current_index %}
+
                                         {{ step|title }} — Current Status
+
                                     {% elif loop.index0 < current_index %}
+
                                         {{ step|title }} — Completed
+
                                     {% else %}
+
                                         {{ step|title }}
+
                                     {% endif %}
 
                                 </li>
 
                             {% endfor %}
+
                         </ol>
 
                     {% else %}
 
                         <p class="tracking-empty">
-                            Delivery progress is not available for this status yet.
-                            Please check again later or contact the store.
+                            Delivery progress is not available
+                            for this status yet.
                         </p>
 
                     {% endif %}
 
+
+                    <!-- ORDER TRACKING QR CODE -->
+                    <div class="tracking-qr-section">
+
+                        <h3>Order Tracking QR Code</h3>
+
+                        <p>
+                            Scan this QR code using your phone
+                            to open this order tracking page.
+                        </p>
+
+                        <div class="tracking-qr-box">
+
+                            <div id="trackingQRCode"
+                                 aria-label="Order tracking QR code">
+                            </div>
+
+                        </div>
+
+                        <div class="tracking-qr-actions">
+
+                            <button type="button"
+                                    class="tracking-qr-button"
+                                    id="downloadTrackingQR">
+
+                                Download QR Code
+
+                            </button>
+
+                            <button type="button"
+                                    class="tracking-qr-button secondary"
+                                    id="copyTrackingLink">
+
+                                Copy Tracking Link
+
+                            </button>
+
+                        </div>
+
+                        <p id="trackingQRMessage"
+                           class="tracking-qr-message"
+                           aria-live="polite">
+                        </p>
+
+                    </div>
+
+
                     <p class="tracking-note">
-                        Delivery progress updates when the store changes
-                        your order's delivery status.
+                        Your delivery information is updated
+                        whenever ShopEase changes your order status.
+                        Scan your QR code to revisit this tracking page.
                     </p>
+
 
                     <a href="{{ url_for('home') }}"
                        class="back-to-store">
+
                         ← Continue Shopping
+
                     </a>
 
                 </section>
 
-            {% elif not error and request.args.get('order_id') %}
+            {% elif not error %}
 
                 <p class="tracking-empty">
-                    No order details are available for that order number.
-                    Please check the number and try again.
+                    No order was selected.
+                    Please scan the QR code provided
+                    after your ShopEase checkout.
                 </p>
 
             {% endif %}
 
         </div>
+
     </main>
+
+
+    <!-- QR CODE LIBRARY -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+
+    <!-- QR CODE GENERATION -->
+    <script>
+
+        document.addEventListener("DOMContentLoaded", function () {
+
+            const qrContainer = document.getElementById("trackingQRCode");
+            const downloadButton = document.getElementById("downloadTrackingQR");
+            const copyButton = document.getElementById("copyTrackingLink");
+            const message = document.getElementById("trackingQRMessage");
+
+            if (!qrContainer || !downloadButton || !copyButton) {
+                return;
+            }
+
+            // The QR code points to the current order tracking URL.
+            const trackingURL = window.location.href;
+
+            // Generate QR code.
+            if (typeof QRCode !== "undefined") {
+
+                new QRCode(qrContainer, {
+                    text: trackingURL,
+                    width: 200,
+                    height: 200,
+                    colorDark: "#172033",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+
+            } else {
+
+                qrContainer.innerHTML =
+                    "<p>QR code library could not load. Please check your internet connection.</p>";
+
+                downloadButton.disabled = true;
+            }
+
+
+            // DOWNLOAD QR CODE
+            downloadButton.addEventListener("click", function () {
+
+                const canvas = qrContainer.querySelector("canvas");
+                const img = qrContainer.querySelector("img");
+
+                let imageURL = "";
+
+                if (canvas) {
+                    imageURL = canvas.toDataURL("image/png");
+                } else if (img && img.src) {
+                    imageURL = img.src;
+                }
+
+                if (!imageURL) {
+
+                    message.textContent =
+                        "QR code is not ready yet.";
+
+                    return;
+                }
+
+                const link = document.createElement("a");
+
+                link.href = imageURL;
+                link.download = "ShopEase_Order_Tracking_QR.png";
+
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                message.textContent =
+                    "QR code downloaded successfully.";
+
+            });
+
+
+            // COPY TRACKING LINK
+            copyButton.addEventListener("click", async function () {
+
+                try {
+
+                    await navigator.clipboard.writeText(trackingURL);
+
+                    message.textContent =
+                        "Tracking link copied successfully!";
+
+                } catch (error) {
+
+                    const textArea = document.createElement("textarea");
+
+                    textArea.value = trackingURL;
+                    textArea.style.position = "fixed";
+                    textArea.style.opacity = "0";
+
+                    document.body.appendChild(textArea);
+
+                    textArea.select();
+
+                    const copied = document.execCommand("copy");
+
+                    document.body.removeChild(textArea);
+
+                    message.textContent = copied
+                        ? "Tracking link copied successfully!"
+                        : "Please copy the tracking link manually.";
+
+                }
+
+            });
+
+        });
+
+    </script>
 
 </body>
 </html>

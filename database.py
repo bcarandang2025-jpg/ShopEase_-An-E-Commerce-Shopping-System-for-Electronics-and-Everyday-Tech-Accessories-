@@ -193,7 +193,25 @@ def initialize_database():
                 ALTER TABLE orders
                 ADD COLUMN created_at TEXT
             """)
+ # ----------------------------------
+        # PRIVATE ORDER TRACKING TOKEN
+        # ----------------------------------
 
+        order_columns = get_columns(connection, "orders")
+
+        if "tracking_token" not in order_columns:
+            connection.execute("""
+                ALTER TABLE orders
+                ADD COLUMN tracking_token TEXT
+            """)
+
+        # Create a unique index for tracking tokens.
+        connection.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_orders_tracking_token
+            ON orders(tracking_token)
+        """)
+        
         connection.commit()
 
         print("Database tables checked successfully!")

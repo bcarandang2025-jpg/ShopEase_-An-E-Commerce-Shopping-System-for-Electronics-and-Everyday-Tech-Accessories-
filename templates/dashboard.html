@@ -58,7 +58,7 @@
             width: 100%;
             border-collapse: collapse;
             color: #172033;
-            min-width: 950px;
+            min-width: 1100px;
         }
 
         .orders-table th,
@@ -151,6 +151,37 @@
             white-space: nowrap;
         }
 
+        /* DUPLICATE ORDER WARNING */
+        .duplicate-badge {
+            display: inline-block;
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fcd34d;
+            padding: 6px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .duplicate-details {
+            color: #92400e;
+            font-size: 13px;
+            margin-top: 5px;
+            line-height: 1.6;
+        }
+
+        .duplicate-details a {
+            color: #b45309;
+            font-weight: 700;
+            text-decoration: underline;
+        }
+
+        .normal-order {
+            color: #64748b;
+            font-size: 13px;
+        }
+
         .dashboard-links {
             display: flex;
             flex-wrap: wrap;
@@ -166,6 +197,58 @@
 
         .dashboard-links a:hover {
             text-decoration: underline;
+        }
+
+        /* DASHBOARD HEADER ACTIONS */
+        .dashboard-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .dashboard-actions form {
+            margin: 0;
+        }
+
+        .view-store-btn,
+        .restock-btn,
+        .logout-btn {
+            display: inline-block;
+            padding: 10px 16px;
+            border-radius: 8px;
+            text-decoration: none;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .view-store-btn {
+            background: #e2e8f0;
+            color: #172033;
+        }
+
+        .view-store-btn:hover {
+            background: #cbd5e1;
+        }
+
+        .restock-btn {
+            background: #0891b2;
+            color: white;
+        }
+
+        .restock-btn:hover {
+            background: #0e7490;
+        }
+
+        .logout-btn {
+            background: #dc2626;
+            color: white;
+        }
+
+        .logout-btn:hover {
+            background: #b91c1c;
         }
 
         @media (max-width: 600px) {
@@ -190,39 +273,68 @@
             .dashboard h1 {
                 font-size: 25px;
             }
+
+            .dashboard-actions {
+                gap: 8px;
+            }
+
+            .dashboard-actions a,
+            .dashboard-actions button {
+                font-size: 12px;
+                padding: 9px 12px;
+            }
         }
     </style>
 </head>
 
 <body>
 
+    <!-- HEADER -->
     <header class="navbar">
-        <a class="logo" href="{{ url_for('home') }}">ShopEase</a>
 
+        <a class="logo" href="{{ url_for('home') }}">
+            ShopEase
+        </a>
 
-    <div class="dashboard-actions">
-    <a href="{{ url_for('home') }}" class="view-store-btn">
-        View Store
-    </a>
+        <div class="dashboard-actions">
 
-    <form
-        action="{{ url_for('admin_logout') }}"
-        method="POST"
-        onsubmit="return confirm('Are you sure you want to log out?');"
-    >
-        <button type="submit" class="logout-btn">
-            ↪ Log Out
-        </button>
-    </form>
-</div>
+            <!-- VIEW STORE -->
+            <a href="{{ url_for('home') }}" class="view-store-btn">
+                View Store
+            </a>
+
+            <!-- RESTOCK PRODUCTS -->
+            <a href="{{ url_for('restock_products') }}"
+               class="restock-btn">
+                + Restock Products
+            </a>
+
+            <!-- LOGOUT -->
+            <form
+                action="{{ url_for('admin_logout') }}"
+                method="POST"
+                onsubmit="return confirm('Are you sure you want to log out?');"
+            >
+                <button type="submit" class="logout-btn">
+                    ↪ Log Out
+                </button>
+            </form>
+
+        </div>
 
     </header>
 
+    <!-- MAIN DASHBOARD -->
     <main class="dashboard">
 
         <h1>Order Management Dashboard</h1>
-        <p>Review customer orders and update delivery progress.</p>
 
+        <p>
+            Review customer orders, identify duplicate orders,
+            and update delivery progress.
+        </p>
+
+        <!-- STATISTICS -->
         <section class="dashboard-stats">
 
             <article class="stat-card">
@@ -247,12 +359,14 @@
 
         </section>
 
+        <!-- UPDATE NOTICE -->
         {% if request.args.get('updated') %}
             <p class="notice success" role="status">
                 Order delivery status updated successfully.
             </p>
         {% endif %}
 
+        <!-- FLASH MESSAGES -->
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% for category, message in messages %}
                 <p class="notice {{ 'error' if category == 'error' else 'success' }}"
@@ -262,11 +376,16 @@
             {% endfor %}
         {% endwith %}
 
+        <!-- ERROR MESSAGE -->
         {% if error is defined and error %}
-            <p class="notice error" role="alert">{{ error }}</p>
+            <p class="notice error" role="alert">
+                {{ error }}
+            </p>
         {% endif %}
 
+        <!-- ORDERS TABLE -->
         <div class="table-wrap">
+
             <table class="orders-table">
 
                 <thead>
@@ -276,52 +395,114 @@
                         <th>Date</th>
                         <th>Total</th>
                         <th>Payment</th>
+                        <th>Duplicate Check</th>
                         <th>Delivery Status</th>
                     </tr>
                 </thead>
 
                 <tbody>
+
                     {% for order in orders %}
 
                         {% set oid = order['order_id'] if order['order_id'] is defined else order['id'] if order['id'] is defined else '' %}
+
                         {% set total_amount = order['total'] if order['total'] is defined else order['total_amount'] if order['total_amount'] is defined else 0 %}
+
                         {% set delivery = order['delivery_status'] if order['delivery_status'] is defined and order['delivery_status'] else 'Pending' %}
+
                         {% set payment = order['payment_status'] if order['payment_status'] is defined and order['payment_status'] else order['status'] if order['status'] is defined and order['status'] else 'Not available' %}
+
                         {% set customer_name = order['customer_name'] if order['customer_name'] is defined and order['customer_name'] else 'Guest' %}
+
                         {% set customer_email = order['customer_email'] if order['customer_email'] is defined else '' %}
+
                         {% set created_at = order['created_at'] if order['created_at'] is defined and order['created_at'] else 'Not available' %}
 
-                        <tr>
-                            <td>#{{ oid }}</td>
+                        {% set duplicate_ids = order.get('duplicate_order_ids', []) %}
 
+                        <tr>
+
+                            <!-- ORDER ID -->
+                            <td>
+                                #{{ oid }}
+                            </td>
+
+                            <!-- CUSTOMER -->
                             <td>
                                 {{ customer_name }}
+
                                 {% if customer_email %}
                                     <br>
                                     <small>{{ customer_email }}</small>
                                 {% endif %}
                             </td>
 
-                            <td>{{ created_at }}</td>
+                            <!-- DATE -->
+                            <td>
+                                {{ created_at }}
+                            </td>
 
+                            <!-- TOTAL -->
                             <td>
                                 ₱{{ "%.2f"|format(total_amount|float) }}
                             </td>
 
+                            <!-- PAYMENT -->
                             <td>
                                 <span class="status-badge">
                                     {{ payment }}
                                 </span>
                             </td>
 
+                            <!-- DUPLICATE CHECK -->
                             <td>
+
+                                {% if duplicate_ids %}
+
+                                    <span class="duplicate-badge">
+                                        ⚠ Possible Duplicate
+                                    </span>
+
+                                    <div class="duplicate-details">
+
+                                        Matches:
+
+                                        {% for duplicate_id in duplicate_ids %}
+
+                                            <a href="#order-{{ duplicate_id }}">
+                                                #{{ duplicate_id }}
+                                            </a>
+
+                                            {% if not loop.last %}
+                                                ,
+                                            {% endif %}
+
+                                        {% endfor %}
+
+                                    </div>
+
+                                {% else %}
+
+                                    <span class="normal-order">
+                                        No matching order flagged
+                                    </span>
+
+                                {% endif %}
+
+                            </td>
+
+                            <!-- DELIVERY STATUS -->
+                            <td>
+
                                 {% if oid %}
+
                                     <form method="post"
                                           action="{{ url_for('update_order_status', order_id=oid) }}">
 
                                         <select name="delivery_status"
                                                 aria-label="Delivery status for order {{ oid }}"
                                                 required>
+
                                             {% for status in [
                                                 'Pending',
                                                 'Processing',
@@ -329,35 +510,51 @@
                                                 'Delivered',
                                                 'Cancelled'
                                             ] %}
+
                                                 <option value="{{ status }}"
                                                     {% if status|lower == delivery|string|lower %}
                                                         selected
                                                     {% endif %}>
                                                     {{ status }}
                                                 </option>
+
                                             {% endfor %}
+
                                         </select>
 
-                                        <button type="submit">Save</button>
+                                        <button type="submit">
+                                            Save
+                                        </button>
+
                                     </form>
+
                                 {% else %}
-                                    <span class="status-badge">Unavailable</span>
+
+                                    <span class="status-badge">
+                                        Unavailable
+                                    </span>
+
                                 {% endif %}
+
                             </td>
+
                         </tr>
 
                     {% else %}
 
+                        <!-- NO ORDERS -->
                         <tr>
-                            <td colspan="6" class="empty-orders">
+                            <td colspan="7" class="empty-orders">
                                 No orders have been placed yet.
                             </td>
                         </tr>
 
                     {% endfor %}
+
                 </tbody>
 
             </table>
+
         </div>
 
     </main>
