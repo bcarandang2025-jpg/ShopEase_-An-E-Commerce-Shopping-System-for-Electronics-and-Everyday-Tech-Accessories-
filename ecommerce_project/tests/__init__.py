@@ -1,3 +1,0 @@
-"""
-ShopEase Testing Package
-"""
