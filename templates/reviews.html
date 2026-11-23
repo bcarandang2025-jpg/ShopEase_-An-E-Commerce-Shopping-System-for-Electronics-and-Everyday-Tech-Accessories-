@@ -1,0 +1,296 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Product Reviews | ShopEase</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/style.css') }}">
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: #f8fafc;
+            color: #0f172a;
+        }
+
+        .reviews-page {
+            max-width: 1000px;
+            margin: auto;
+            padding: 40px 20px;
+        }
+
+        .reviews-header {
+            margin-bottom: 30px;
+        }
+
+        .reviews-header h1 {
+            font-size: 30px;
+            margin-bottom: 8px;
+        }
+
+        .reviews-header p {
+            color: #64748b;
+        }
+
+        .product-summary {
+            background: white;
+            padding: 25px;
+            border-radius: 16px;
+            border: 1px solid #e2e8f0;
+            margin-bottom: 25px;
+        }
+
+        .product-summary h2 {
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+
+        .product-price {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .rating-summary {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .average-rating {
+            font-size: 42px;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .summary-stars {
+            color: #f59e0b;
+            font-size: 25px;
+            letter-spacing: 2px;
+        }
+
+        .rating-details {
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        .reviews-section {
+            margin-top: 30px;
+        }
+
+        .reviews-section h2 {
+            margin-bottom: 20px;
+        }
+
+        .review-card {
+            background: white;
+            padding: 22px;
+            border-radius: 14px;
+            border: 1px solid #e2e8f0;
+            margin-bottom: 16px;
+        }
+
+        .review-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .customer-name {
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        .review-stars {
+            color: #f59e0b;
+            font-size: 20px;
+            letter-spacing: 2px;
+            margin-top: 6px;
+        }
+
+        .review-date {
+            color: #64748b;
+            font-size: 13px;
+        }
+
+        .review-comment {
+            line-height: 1.7;
+            margin-top: 15px;
+            color: #334155;
+            overflow-wrap: anywhere;
+            white-space: pre-wrap;
+        }
+
+        .empty-reviews {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 35px;
+            text-align: center;
+            color: #64748b;
+        }
+
+        .back-button {
+            display: inline-block;
+            margin-top: 25px;
+            padding: 13px 20px;
+            background: #0f172a;
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 600;
+            transition: 0.2s;
+        }
+
+        .back-button:hover {
+            background: #1e293b;
+        }
+
+        @media (max-width: 600px) {
+
+            .reviews-page {
+                padding: 25px 15px;
+            }
+
+            .reviews-header h1 {
+                font-size: 24px;
+            }
+
+            .average-rating {
+                font-size: 35px;
+            }
+
+            .product-summary,
+            .review-card {
+                padding: 18px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="reviews-page">
+
+    <div class="reviews-header">
+        <h1>Customer Reviews</h1>
+        <p>See what our customers think about this product.</p>
+    </div>
+
+    <!-- PRODUCT SUMMARY -->
+    <div class="product-summary">
+
+        <h2>{{ product['name'] }}</h2>
+
+        {% if product['price'] is defined %}
+            <div class="product-price">
+                ₱{{ "%.2f"|format(product['price']|float) }}
+            </div>
+        {% endif %}
+
+        <div class="rating-summary">
+
+            <div class="average-rating">
+                {{ "%.1f"|format(rating_summary['average_rating']|float) }}
+            </div>
+
+            <div>
+
+                <div class="summary-stars">
+                    {% set avg = rating_summary['average_rating']|float %}
+                    {% for i in range(1, 6) %}
+                        {% if i <= avg %}
+                            &#9733;
+                        {% else %}
+                            &#9734;
+                        {% endif %}
+                    {% endfor %}
+                </div>
+
+                <div class="rating-details">
+                    {{ rating_summary['total_reviews'] }}
+                    review(s)
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- CUSTOMER REVIEWS -->
+    <div class="reviews-section">
+
+        <h2>Customer Feedback</h2>
+
+        {% if reviews %}
+
+            {% for review in reviews %}
+
+                <div class="review-card">
+
+                    <div class="review-top">
+
+                        <div>
+
+                            <div class="customer-name">
+                                {{ review['customer_name'] or 'ShopEase Customer' }}
+                            </div>
+
+                            <div class="review-stars">
+                                {% for i in range(1, 6) %}
+                                    {% if i <= review['rating']|int %}
+                                        &#9733;
+                                    {% else %}
+                                        &#9734;
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+
+                        </div>
+
+                        <div class="review-date">
+                            {{ review['created_at'] or '' }}
+                        </div>
+
+                    </div>
+
+                    <div class="review-comment">
+                        {{ review['comment'] }}
+                    </div>
+
+                </div>
+
+            {% endfor %}
+
+        {% else %}
+
+            <div class="empty-reviews">
+                <h3>No reviews yet</h3>
+                <p>This product has not received any reviews yet.</p>
+                <p>Be the first customer to share your experience!</p>
+            </div>
+
+        {% endif %}
+
+    </div>
+
+    <a href="{{ url_for('index') }}" class="back-button">
+        Back to Store
+    </a>
+
+</div>
+
+</body>
+</html>

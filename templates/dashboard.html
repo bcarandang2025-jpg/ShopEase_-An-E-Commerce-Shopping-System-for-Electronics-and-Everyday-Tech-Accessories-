@@ -152,6 +152,7 @@
         }
 
         /* DUPLICATE ORDER WARNING */
+
         .duplicate-badge {
             display: inline-block;
             background: #fef3c7;
@@ -182,6 +183,8 @@
             font-size: 13px;
         }
 
+        /* DASHBOARD LINKS */
+
         .dashboard-links {
             display: flex;
             flex-wrap: wrap;
@@ -200,6 +203,7 @@
         }
 
         /* DASHBOARD HEADER ACTIONS */
+
         .dashboard-actions {
             display: flex;
             flex-wrap: wrap;
@@ -213,6 +217,7 @@
 
         .view-store-btn,
         .restock-btn,
+        .reviews-btn,
         .logout-btn {
             display: inline-block;
             padding: 10px 16px;
@@ -242,6 +247,17 @@
             background: #0e7490;
         }
 
+        /* CUSTOMER REVIEWS BUTTON */
+
+        .reviews-btn {
+            background: #f59e0b;
+            color: #172033;
+        }
+
+        .reviews-btn:hover {
+            background: #d97706;
+        }
+
         .logout-btn {
             background: #dc2626;
             color: white;
@@ -249,6 +265,16 @@
 
         .logout-btn:hover {
             background: #b91c1c;
+        }
+
+        .public-order-id {
+            font-weight: 700;
+            color: #0891b2;
+        }
+
+        .internal-order-id {
+            font-size: 12px;
+            color: #64748b;
         }
 
         @media (max-width: 600px) {
@@ -299,8 +325,15 @@
         <div class="dashboard-actions">
 
             <!-- VIEW STORE -->
-            <a href="{{ url_for('home') }}" class="view-store-btn">
+            <a href="{{ url_for('home') }}"
+               class="view-store-btn">
                 View Store
+            </a>
+
+            <!-- CUSTOMER REVIEWS -->
+            <a href="{{ url_for('admin_reviews') }}"
+               class="reviews-btn">
+                ★ Customer Reviews
             </a>
 
             <!-- RESTOCK PRODUCTS -->
@@ -324,6 +357,7 @@
 
     </header>
 
+
     <!-- MAIN DASHBOARD -->
     <main class="dashboard">
 
@@ -334,12 +368,18 @@
             and update delivery progress.
         </p>
 
+
         <!-- STATISTICS -->
         <section class="dashboard-stats">
 
             <article class="stat-card">
                 <p>Total Orders</p>
                 <h2>{{ stats.total|default(0) }}</h2>
+            </article>
+
+            <article class="stat-card">
+                <p>Pending</p>
+                <h2>{{ stats.pending|default(0) }}</h2>
             </article>
 
             <article class="stat-card">
@@ -357,7 +397,13 @@
                 <h2>{{ stats.delivered|default(0) }}</h2>
             </article>
 
+            <article class="stat-card">
+                <p>Cancelled</p>
+                <h2>{{ stats.cancelled|default(0) }}</h2>
+            </article>
+
         </section>
+
 
         <!-- UPDATE NOTICE -->
         {% if request.args.get('updated') %}
@@ -366,22 +412,33 @@
             </p>
         {% endif %}
 
+
         <!-- FLASH MESSAGES -->
         {% with messages = get_flashed_messages(with_categories=true) %}
+
             {% for category, message in messages %}
+
                 <p class="notice {{ 'error' if category == 'error' else 'success' }}"
                    role="{{ 'alert' if category == 'error' else 'status' }}">
+
                     {{ message }}
+
                 </p>
+
             {% endfor %}
+
         {% endwith %}
+
 
         <!-- ERROR MESSAGE -->
         {% if error is defined and error %}
+
             <p class="notice error" role="alert">
                 {{ error }}
             </p>
+
         {% endif %}
+
 
         <!-- ORDERS TABLE -->
         <div class="table-wrap">
@@ -389,6 +446,7 @@
             <table class="orders-table">
 
                 <thead>
+
                     <tr>
                         <th>Order ID</th>
                         <th>Customer</th>
@@ -398,13 +456,17 @@
                         <th>Duplicate Check</th>
                         <th>Delivery Status</th>
                     </tr>
+
                 </thead>
+
 
                 <tbody>
 
                     {% for order in orders %}
 
                         {% set oid = order['order_id'] if order['order_id'] is defined else order['id'] if order['id'] is defined else '' %}
+
+                        {% set public_id = order.get('public_order_id', '') %}
 
                         {% set total_amount = order['total'] if order['total'] is defined else order['total_amount'] if order['total_amount'] is defined else 0 %}
 
@@ -418,46 +480,81 @@
 
                         {% set created_at = order['created_at'] if order['created_at'] is defined and order['created_at'] else 'Not available' %}
 
-                        {% set duplicate_ids = order.get('duplicate_order_ids', []) %}
+                        {% set is_duplicate = order.get('duplicate', false) %}
 
-                        <tr>
+                        {% set duplicate_of = order.get('duplicate_of') %}
+
+
+                        <tr id="order-{{ oid }}">
 
                             <!-- ORDER ID -->
                             <td>
-                                #{{ oid }}
+
+                                {% if public_id %}
+
+                                    <span class="public-order-id">
+                                        {{ public_id }}
+                                    </span>
+
+                                    <br>
+
+                                    <span class="internal-order-id">
+                                        Internal ID: #{{ oid }}
+                                    </span>
+
+                                {% else %}
+
+                                    #{{ oid }}
+
+                                {% endif %}
+
                             </td>
+
 
                             <!-- CUSTOMER -->
                             <td>
+
                                 {{ customer_name }}
 
                                 {% if customer_email %}
+
                                     <br>
-                                    <small>{{ customer_email }}</small>
+
+                                    <small>
+                                        {{ customer_email }}
+                                    </small>
+
                                 {% endif %}
+
                             </td>
+
 
                             <!-- DATE -->
                             <td>
                                 {{ created_at }}
                             </td>
 
+
                             <!-- TOTAL -->
                             <td>
                                 ₱{{ "%.2f"|format(total_amount|float) }}
                             </td>
 
+
                             <!-- PAYMENT -->
                             <td>
+
                                 <span class="status-badge">
                                     {{ payment }}
                                 </span>
+
                             </td>
+
 
                             <!-- DUPLICATE CHECK -->
                             <td>
 
-                                {% if duplicate_ids %}
+                                {% if is_duplicate %}
 
                                     <span class="duplicate-badge">
                                         ⚠ Possible Duplicate
@@ -465,19 +562,19 @@
 
                                     <div class="duplicate-details">
 
-                                        Matches:
+                                        {% if duplicate_of %}
 
-                                        {% for duplicate_id in duplicate_ids %}
+                                            Matches order:
 
-                                            <a href="#order-{{ duplicate_id }}">
-                                                #{{ duplicate_id }}
+                                            <a href="#order-{{ duplicate_of }}">
+                                                #{{ duplicate_of }}
                                             </a>
 
-                                            {% if not loop.last %}
-                                                ,
-                                            {% endif %}
+                                        {% else %}
 
-                                        {% endfor %}
+                                            This order may be a duplicate.
+
+                                        {% endif %}
 
                                     </div>
 
@@ -490,6 +587,7 @@
                                 {% endif %}
 
                             </td>
+
 
                             <!-- DELIVERY STATUS -->
                             <td>
@@ -515,7 +613,9 @@
                                                     {% if status|lower == delivery|string|lower %}
                                                         selected
                                                     {% endif %}>
+
                                                     {{ status }}
+
                                                 </option>
 
                                             {% endfor %}
@@ -540,13 +640,19 @@
 
                         </tr>
 
+
                     {% else %}
 
                         <!-- NO ORDERS -->
                         <tr>
-                            <td colspan="7" class="empty-orders">
+
+                            <td colspan="7"
+                                class="empty-orders">
+
                                 No orders have been placed yet.
+
                             </td>
+
                         </tr>
 
                     {% endfor %}

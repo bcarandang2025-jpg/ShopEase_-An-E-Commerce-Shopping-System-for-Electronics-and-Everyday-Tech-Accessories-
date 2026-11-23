@@ -1,0 +1,357 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Write a Review | ShopEase</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/style.css') }}">
+
+    <style>
+        .review-page {
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 30px 15px;
+        }
+
+        .review-container {
+            width: 100%;
+            max-width: 650px;
+            background: white;
+            padding: 35px;
+            border-radius: 18px;
+            box-shadow: 0 10px 35px rgba(0, 0, 0, 0.08);
+        }
+
+        .review-header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        .review-header h1 {
+            margin-bottom: 10px;
+            color: #0f172a;
+        }
+
+        .review-header p {
+            color: #64748b;
+        }
+
+        .review-product {
+            padding: 18px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            margin-bottom: 25px;
+        }
+
+        .review-product h3 {
+            margin: 0 0 8px;
+            color: #0f172a;
+        }
+
+        .review-product p {
+            margin: 0;
+            color: #64748b;
+        }
+
+        .rating-section {
+            text-align: center;
+            margin: 25px 0;
+        }
+
+        .rating-section h3 {
+            margin-bottom: 12px;
+            color: #0f172a;
+        }
+
+        .stars {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            direction: ltr;
+        }
+
+        .stars button {
+            border: none;
+            background: none;
+            font-size: 45px;
+            cursor: pointer;
+            color: #cbd5e1;
+            transition: 0.2s;
+            padding: 0;
+        }
+
+        .stars button.active,
+        .stars button:hover {
+            color: #f59e0b;
+        }
+
+        .rating-label {
+            margin-top: 10px;
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        .review-form label {
+            display: block;
+            font-weight: 600;
+            color: #0f172a;
+            margin-bottom: 8px;
+        }
+
+        .review-form textarea {
+            width: 100%;
+            min-height: 150px;
+            resize: vertical;
+            padding: 14px;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            font-family: inherit;
+            font-size: 15px;
+            box-sizing: border-box;
+            outline: none;
+        }
+
+        .review-form textarea:focus {
+            border-color: #22d3ee;
+            box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15);
+        }
+
+        .char-counter {
+            text-align: right;
+            font-size: 13px;
+            color: #64748b;
+            margin-top: 6px;
+        }
+
+        .review-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 25px;
+        }
+
+        .review-actions button,
+        .review-actions a {
+            flex: 1;
+            text-align: center;
+            padding: 14px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 15px;
+            cursor: pointer;
+            box-sizing: border-box;
+        }
+
+        .submit-review-btn {
+            background: #0f172a;
+            color: white;
+            border: none;
+        }
+
+        .submit-review-btn:hover {
+            background: #1e293b;
+        }
+
+        .cancel-btn {
+            background: #f1f5f9;
+            color: #0f172a;
+        }
+
+        .cancel-btn:hover {
+            background: #e2e8f0;
+        }
+
+        .flash-message {
+            padding: 12px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            background: #fef2f2;
+            color: #b91c1c;
+        }
+
+        @media (max-width: 500px) {
+            .review-container {
+                padding: 22px;
+            }
+
+            .stars button {
+                font-size: 38px;
+            }
+
+            .review-actions {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="review-page">
+
+    <div class="review-container">
+
+        <div class="review-header">
+            <h1>Write a Product Review</h1>
+            <p>Share your experience with your purchased product.</p>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-message">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="review-product">
+            <h3>{{ product['name'] }}</h3>
+            <p>Order #{{ order_id }}</p>
+        </div>
+
+        <form method="POST" class="review-form" id="reviewForm">
+
+            <div class="rating-section">
+
+                <h3>Rate this product</h3>
+
+                <div class="stars" id="starContainer">
+
+                    <button type="button" data-rating="1"
+                            aria-label="1 star">&#9733;</button>
+
+                    <button type="button" data-rating="2"
+                            aria-label="2 stars">&#9733;</button>
+
+                    <button type="button" data-rating="3"
+                            aria-label="3 stars">&#9733;</button>
+
+                    <button type="button" data-rating="4"
+                            aria-label="4 stars">&#9733;</button>
+
+                    <button type="button" data-rating="5"
+                            aria-label="5 stars">&#9733;</button>
+
+                </div>
+
+                <p class="rating-label" id="ratingLabel">
+                    Select a rating
+                </p>
+
+                <input type="hidden" name="rating"
+                       id="ratingInput" required>
+
+            </div>
+
+            <div>
+                <label for="comment">
+                    Your Review
+                </label>
+
+                <textarea
+                    name="comment"
+                    id="comment"
+                    maxlength="2000"
+                    required
+                    placeholder="Tell us what you think about this product..."
+                ></textarea>
+
+                <div class="char-counter">
+                    <span id="charCount">0</span>/2000 characters
+                </div>
+            </div>
+
+            <div class="review-actions">
+
+                <a href="{{ url_for('track_order_private', token=token) }}"
+                   class="cancel-btn">
+                    Back to Tracking
+                </a>
+
+                <button type="submit"
+                        class="submit-review-btn">
+                    Submit Review
+                </button>
+
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+
+<script>
+    const starButtons = document.querySelectorAll("#starContainer button");
+    const ratingInput = document.getElementById("ratingInput");
+    const ratingLabel = document.getElementById("ratingLabel");
+    const commentInput = document.getElementById("comment");
+    const charCount = document.getElementById("charCount");
+    const reviewForm = document.getElementById("reviewForm");
+
+    const ratingMessages = {
+        1: "Poor",
+        2: "Fair",
+        3: "Good",
+        4: "Very Good",
+        5: "Excellent"
+    };
+
+    starButtons.forEach(button => {
+
+        button.addEventListener("click", function() {
+
+            const rating = parseInt(this.dataset.rating);
+
+            ratingInput.value = rating;
+
+            ratingLabel.textContent = ratingMessages[rating];
+
+            starButtons.forEach(star => {
+
+                const starRating = parseInt(star.dataset.rating);
+
+                if (starRating <= rating) {
+                    star.classList.add("active");
+                } else {
+                    star.classList.remove("active");
+                }
+
+            });
+
+        });
+
+    });
+
+    commentInput.addEventListener("input", function() {
+        charCount.textContent = this.value.length;
+    });
+
+    reviewForm.addEventListener("submit", function(event) {
+
+        if (!ratingInput.value) {
+            event.preventDefault();
+            alert("Please select a star rating before submitting.");
+            return;
+        }
+
+        if (!commentInput.value.trim()) {
+            event.preventDefault();
+            alert("Please write a comment before submitting.");
+            return;
+        }
+
+    });
+</script>
+
+</body>
+</html>

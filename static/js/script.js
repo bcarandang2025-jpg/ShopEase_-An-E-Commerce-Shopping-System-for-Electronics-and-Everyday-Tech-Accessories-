@@ -38,6 +38,7 @@ function loadCart() {
         });
 
         return validCart;
+
     } catch (error) {
         console.error("Unable to load cart:", error);
         return {};
@@ -45,6 +46,10 @@ function loadCart() {
 }
 
 let cart = loadCart();
+
+/* =========================================
+   SAVE CART
+========================================= */
 
 function saveCart() {
     try {
@@ -121,7 +126,7 @@ function updateCartCount() {
 function renderCart() {
     const container = document.getElementById("cart-items");
 
-    // The homepage does not contain this element.
+    // Homepage does not contain the cart container.
     if (!container) {
         updateCartCount();
         return;
@@ -131,6 +136,10 @@ function renderCart() {
 
     const items = Object.values(cart);
     let total = 0;
+
+    /* =====================================
+       EMPTY CART
+    ===================================== */
 
     if (items.length === 0) {
         const emptyMessage = document.createElement("div");
@@ -151,6 +160,10 @@ function renderCart() {
         container.appendChild(emptyMessage);
     }
 
+    /* =====================================
+       CART ITEMS
+    ===================================== */
+
     items.forEach((item) => {
         const id = String(item.id);
         const subtotal = item.price * item.quantity;
@@ -160,7 +173,8 @@ function renderCart() {
         const row = document.createElement("article");
         row.className = "cart-row";
 
-        // Product image
+        /* PRODUCT IMAGE */
+
         const imageContainer = document.createElement("div");
         imageContainer.className = "cart-product-image";
 
@@ -176,7 +190,8 @@ function renderCart() {
 
         imageContainer.appendChild(image);
 
-        // Product details
+        /* PRODUCT DETAILS */
+
         const details = document.createElement("div");
         details.className = "cart-product-details";
 
@@ -195,12 +210,15 @@ function renderCart() {
 
         details.append(title, unitPrice, subtotalText, stockText);
 
-        // Quantity controls
+        /* QUANTITY CONTROLS */
+
         const controls = document.createElement("div");
         controls.className = "cart-controls";
 
         const quantityControls = document.createElement("div");
         quantityControls.className = "quantity-controls";
+
+        /* DECREASE QUANTITY */
 
         const minus = document.createElement("button");
         minus.type = "button";
@@ -220,14 +238,19 @@ function renderCart() {
             renderCart();
         });
 
+        /* DISPLAY QUANTITY */
+
         const quantityText = document.createElement("span");
         quantityText.textContent = item.quantity;
         quantityText.setAttribute("aria-label", "Quantity");
+
+        /* INCREASE QUANTITY */
 
         const plus = document.createElement("button");
         plus.type = "button";
         plus.textContent = "+";
         plus.setAttribute("aria-label", `Increase ${item.name}`);
+
         plus.disabled = item.quantity >= item.stock;
 
         plus.addEventListener("click", () => {
@@ -239,13 +262,15 @@ function renderCart() {
             }
 
             cart[id].quantity += 1;
+
             saveCart();
             renderCart();
         });
 
         quantityControls.append(minus, quantityText, plus);
 
-        // Remove button
+        /* REMOVE ITEM */
+
         const remove = document.createElement("button");
         remove.type = "button";
         remove.className = "remove-button";
@@ -254,23 +279,32 @@ function renderCart() {
 
         remove.addEventListener("click", () => {
             delete cart[id];
+
             saveCart();
             renderCart();
         });
 
         controls.append(quantityControls, remove);
+
         row.append(imageContainer, details, controls);
+
         container.appendChild(row);
     });
 
-    // Update total
+    /* =====================================
+       UPDATE CART TOTAL
+    ===================================== */
+
     const totalElement = document.getElementById("cart-total");
 
     if (totalElement) {
         totalElement.textContent = formatPrice(total);
     }
 
-    // Disable checkout if the cart is empty
+    /* =====================================
+       CHECKOUT BUTTON
+    ===================================== */
+
     const checkoutButton = document.getElementById("checkout-button");
 
     if (checkoutButton) {
@@ -285,13 +319,17 @@ function renderCart() {
 ========================================= */
 
 document.querySelectorAll(".add-button").forEach((button) => {
+
     const originalText = button.textContent.trim() || "Add to Cart +";
 
     button.addEventListener("click", () => {
+
         const id = Number(button.dataset.id);
         const stock = Math.floor(Number(button.dataset.stock));
         const price = Number(button.dataset.price);
         const name = String(button.dataset.name || "").trim();
+
+        /* VALIDATE PRODUCT INFORMATION */
 
         if (
             !Number.isSafeInteger(id) || id <= 0 ||
@@ -305,10 +343,14 @@ document.querySelectorAll(".add-button").forEach((button) => {
 
         const key = String(id);
 
+        /* CHECK STOCK */
+
         if (cart[key] && cart[key].quantity >= stock) {
             alert("You have reached the available stock.");
             return;
         }
+
+        /* ADD NEW PRODUCT */
 
         if (!cart[key]) {
             cart[key] = {
@@ -319,22 +361,28 @@ document.querySelectorAll(".add-button").forEach((button) => {
                 stock
             };
         } else {
-            // Refresh the stored stock and product information.
+            // Refresh product details and stock.
             cart[key].stock = stock;
             cart[key].name = name;
             cart[key].price = price;
         }
+
+        /* INCREASE QUANTITY */
 
         cart[key].quantity += 1;
 
         saveCart();
         updateCartCount();
 
+        /* BUTTON FEEDBACK */
+
         button.textContent = "Added ✓";
+
         button.disabled = cart[key].quantity >= stock;
 
         setTimeout(() => {
             button.textContent = originalText;
+
             button.disabled = stock < 1;
         }, 800);
     });
@@ -347,7 +395,9 @@ document.querySelectorAll(".add-button").forEach((button) => {
 const checkoutForm = document.getElementById("checkout-form");
 
 if (checkoutForm) {
+
     checkoutForm.addEventListener("submit", async (event) => {
+
         event.preventDefault();
 
         const message = document.getElementById("checkout-message");
@@ -358,10 +408,14 @@ if (checkoutForm) {
             return;
         }
 
+        /* CHECK CART */
+
         if (Object.keys(cart).length === 0) {
             message.textContent = "Please add products to your cart first.";
             return;
         }
+
+        /* VALIDATE FORM */
 
         if (!checkoutForm.reportValidity()) {
             return;
@@ -369,10 +423,13 @@ if (checkoutForm) {
 
         const formData = new FormData(checkoutForm);
 
+        /* CREATE CHECKOUT PAYLOAD */
+
         const payload = {
             name: String(formData.get("name") || "").trim(),
             email: String(formData.get("email") || "").trim(),
             phone: String(formData.get("phone") || "").trim(),
+
             items: Object.values(cart).map((item) => ({
                 id: item.id,
                 quantity: item.quantity
@@ -384,19 +441,28 @@ if (checkoutForm) {
             return;
         }
 
+        /* DISABLE CHECKOUT */
+
         button.disabled = true;
+
         message.textContent = "Processing your mock order...";
 
         try {
+
+            /* SEND REQUEST TO FLASK */
+
             const response = await fetch("/api/checkout", {
                 method: "POST",
+
                 headers: {
                     "Content-Type": "application/json"
                 },
+
                 body: JSON.stringify(payload)
             });
 
-            // Handle non-JSON server responses safely.
+            /* READ SERVER RESPONSE */
+
             let result;
 
             try {
@@ -409,12 +475,20 @@ if (checkoutForm) {
                 throw new Error(result.error || "Checkout failed.");
             }
 
+            /* CHECK ORDER ID */
+
             if (!result.order_id) {
-                throw new Error("Order was created, but no order number was returned.");
+                throw new Error(
+                    "Order was created, but no order number was returned."
+                );
             }
 
-            // Clear cart only after a successful server response.
+            /* =====================================
+               SUCCESSFUL CHECKOUT
+            ===================================== */
+
             cart = {};
+
             saveCart();
             renderCart();
             checkoutForm.reset();
@@ -424,7 +498,10 @@ if (checkoutForm) {
                 `Total: ${formatPrice(result.total)}. ` +
                 "Mock payment successful.";
 
-            // Redirect to the tracking page after a short delay.
+            /* =====================================
+               TRACKING REDIRECT
+            ===================================== */
+
             const trackingUrl =
                 result.tracking_url ||
                 `/track-order?order_id=${encodeURIComponent(result.order_id)}`;
@@ -434,31 +511,36 @@ if (checkoutForm) {
             }, 1800);
 
         } catch (error) {
+
             message.textContent =
                 error.message || "Something went wrong. Please try again.";
+
         } finally {
+
             button.disabled = Object.keys(cart).length === 0;
         }
     });
 }
 
 /* =========================================
-   INITIALIZE
+   INITIALIZE CART
 ========================================= */
 
 renderCart();
 updateCartCount();
 
-
-/* =====================================
+/* =========================================
    SHOEASE PRODUCT SEARCH
-===================================== */
+========================================= */
 
-document.addEventListener("DOMContentLoaded", function () {
+function initializeProductSearch() {
+
     const searchForm = document.getElementById("product-search-form");
     const searchInput = document.getElementById("product-search");
     const productGrid = document.querySelector(".product-grid");
     const productCount = document.querySelector(".product-count");
+
+    /* CHECK SEARCH ELEMENTS */
 
     if (!searchForm || !searchInput || !productGrid) {
         return;
@@ -468,8 +550,12 @@ document.addEventListener("DOMContentLoaded", function () {
         productGrid.querySelectorAll(".product-card")
     );
 
-    // Create a no-results message
+    /* =====================================
+       NO RESULTS MESSAGE
+    ===================================== */
+
     const noResults = document.createElement("div");
+
     noResults.id = "search-no-results";
     noResults.className = "empty-products";
     noResults.hidden = true;
@@ -482,11 +568,18 @@ document.addEventListener("DOMContentLoaded", function () {
 
     productGrid.appendChild(noResults);
 
+    /* =====================================
+       SEARCH PRODUCTS
+    ===================================== */
+
     function searchProducts() {
+
         const query = searchInput.value.trim().toLowerCase();
+
         let visibleCount = 0;
 
         productCards.forEach(function (card) {
+
             const name =
                 card.querySelector("h3")?.textContent || "";
 
@@ -508,11 +601,14 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         });
 
-        // Show the message only when a search has no matches
+        /* SHOW NO RESULTS */
+
         noResults.hidden = query === "" || visibleCount > 0;
 
-        // Update the product count
+        /* UPDATE PRODUCT COUNT */
+
         if (productCount) {
+
             if (query === "") {
                 productCount.textContent =
                     `${productCards.length} products`;
@@ -523,11 +619,18 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
-    // Search as the customer types
+    /* =====================================
+       SEARCH WHILE TYPING
+    ===================================== */
+
     searchInput.addEventListener("input", searchProducts);
 
-    // Handle clicking Search or pressing Enter
+    /* =====================================
+       SEARCH BUTTON / ENTER
+    ===================================== */
+
     searchForm.addEventListener("submit", function (event) {
+
         event.preventDefault();
 
         searchProducts();
@@ -537,5 +640,17 @@ document.addEventListener("DOMContentLoaded", function () {
             block: "start"
         });
     });
-});
+}
 
+/* =========================================
+   DOM INITIALIZATION
+========================================= */
+
+if (document.readyState === "loading") {
+
+    document.addEventListener("DOMContentLoaded", initializeProductSearch);
+
+} else {
+
+    initializeProductSearch();
+}

@@ -1,4 +1,3 @@
-
 import sqlite3
 from pathlib import Path
 
@@ -43,6 +42,11 @@ def find_column(columns, *candidates):
     return None
 
 
+def quote_identifier(identifier):
+    """Safely quote a SQL identifier."""
+    return '"' + str(identifier).replace('"', '""') + '"'
+
+
 # ==========================================
 # CREATE TABLES AND UPDATE EXISTING DATABASE
 # ==========================================
@@ -51,8 +55,6 @@ def initialize_database():
     connection = get_connection()
 
     try:
-        # Create the standard tables if they do not exist.
-        # Existing tables and records are preserved.
         connection.executescript("""
             CREATE TABLE IF NOT EXISTS customers (
                 customer_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -162,7 +164,6 @@ def initialize_database():
                 "The orders table needs an 'id' or 'order_id' column."
             )
 
-        # Support either total or total_amount.
         total_column = find_column(
             order_columns, "total", "total_amount"
         )
@@ -193,7 +194,8 @@ def initialize_database():
                 ALTER TABLE orders
                 ADD COLUMN created_at TEXT
             """)
- # ----------------------------------
+
+        # ----------------------------------
         # PRIVATE ORDER TRACKING TOKEN
         # ----------------------------------
 
@@ -205,13 +207,41 @@ def initialize_database():
                 ADD COLUMN tracking_token TEXT
             """)
 
-        # Create a unique index for tracking tokens.
         connection.execute("""
             CREATE UNIQUE INDEX IF NOT EXISTS
             idx_orders_tracking_token
             ON orders(tracking_token)
         """)
-        
+
+        # ----------------------------------
+        # PRODUCT REVIEWS TABLE
+        # ----------------------------------
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS product_reviews (
+                review_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id INTEGER NOT NULL,
+                customer_id INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),
+                comment TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(order_id, product_id)
+            )
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS
+            idx_product_reviews_product
+            ON product_reviews(product_id)
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS
+            idx_product_reviews_customer
+            ON product_reviews(customer_id)
+        """)
+
         connection.commit()
 
         print("Database tables checked successfully!")
@@ -219,6 +249,7 @@ def initialize_database():
         print(f"Customer ID column: {customer_id_column}")
         print(f"Order ID column: {order_id_column}")
         print("Order delivery tracking is ready!")
+        print("Product reviews system is ready!")
 
     except Exception:
         connection.rollback()
@@ -301,7 +332,8 @@ def seed_products():
                 values.insert(1, description)
 
             quoted_columns = ", ".join(
-                f'"{column}"' for column in insert_columns
+                quote_identifier(column)
+                for column in insert_columns
             )
             placeholders = ", ".join("?" for _ in values)
 
@@ -376,9 +408,7 @@ def view_orders():
         customer_columns = get_columns(connection, "customers")
 
         order_id = find_column(order_columns, "order_id", "id")
-        customer_id = find_column(
-            order_columns, "customer_id", "customer_id"
-        )
+        customer_id = find_column(order_columns, "customer_id")
         customer_pk = find_column(
             customer_columns, "customer_id", "id"
         )
@@ -485,6 +515,338 @@ def update_delivery_status(order_id, new_status):
 
 
 # ==========================================
+# PRODUCT REVIEW SYSTEM
+# ==========================================
+
+def get_review_for_order_product(order_id, product_id):
+    """
+    Check whether a customer already reviewed
+    a product within a particular order.
+    """
+
+    connection = get_connection()
+
+    try:
+        return connection.execute("""
+            SELECT *
+            FROM product_reviews
+            WHERE order_id = ?
+              AND product_id = ?
+            LIMIT 1
+        """, (order_id, product_id)).fetchone()
+
+    finally:
+        connection.close()
+
+
+def submit_product_review(
+    order_id,
+    customer_id,
+    product_id,
+    rating,
+    comment
+):
+    """
+    Submit a review for a product from a delivered order.
+
+    Only the customer who owns the delivered order
+    can review its products.
+
+    Returns:
+        (True, success_message) on success
+        (False, error_message) on failure
+    """
+
+    # ----------------------------------
+    # VALIDATE RATING
+    # ----------------------------------
+
+    try:
+        rating = int(rating)
+    except (TypeError, ValueError):
+        return False, "Rating must be a number from 1 to 5."
+
+    if rating < 1 or rating > 5:
+        return False, "Rating must be between 1 and 5 stars."
+
+    # ----------------------------------
+    # VALIDATE COMMENT
+    # ----------------------------------
+
+    if not isinstance(comment, str):
+        return False, "Review comment must be text."
+
+    comment = comment.strip()
+
+    if not comment:
+        return False, "Please write a review before submitting."
+
+    if len(comment) > 2000:
+        return False, "Your review must not exceed 2000 characters."
+
+    connection = get_connection()
+
+    try:
+        # ----------------------------------
+        # DETECT DATABASE COLUMNS
+        # ----------------------------------
+
+        order_columns = get_columns(connection, "orders")
+        item_columns = get_columns(connection, "order_items")
+
+        order_id_column = find_column(
+            order_columns, "order_id", "id"
+        )
+        customer_id_column = find_column(
+            order_columns, "customer_id"
+        )
+        delivery_column = find_column(
+            order_columns, "delivery_status"
+        )
+
+        item_order_column = find_column(
+            item_columns, "order_id"
+        )
+        item_product_column = find_column(
+            item_columns, "product_id"
+        )
+
+        if not all([
+            order_id_column,
+            customer_id_column,
+            delivery_column,
+            item_order_column,
+            item_product_column,
+        ]):
+            return False, "The order database structure is incomplete."
+
+        # ----------------------------------
+        # VERIFY ORDER OWNERSHIP AND DELIVERY
+        # ----------------------------------
+
+        order = connection.execute(
+            f"""
+            SELECT *
+            FROM orders
+            WHERE "{order_id_column}" = ?
+              AND "{customer_id_column}" = ?
+            """,
+            (order_id, customer_id),
+        ).fetchone()
+
+        if not order:
+            return False, "Order not found or does not belong to you."
+
+        if str(order[delivery_column]).strip().lower() != "delivered":
+            return False, "You can only review delivered orders."
+
+        # ----------------------------------
+        # VERIFY PRODUCT WAS IN THE ORDER
+        # ----------------------------------
+
+        purchased_product = connection.execute(
+            f"""
+            SELECT 1
+            FROM order_items
+            WHERE "{item_order_column}" = ?
+              AND "{item_product_column}" = ?
+            LIMIT 1
+            """,
+            (order_id, product_id),
+        ).fetchone()
+
+        if not purchased_product:
+            return False, "This product was not included in your order."
+
+        # ----------------------------------
+        # PREVENT DUPLICATE REVIEWS
+        # ----------------------------------
+
+        existing_review = connection.execute("""
+            SELECT review_id
+            FROM product_reviews
+            WHERE order_id = ?
+              AND product_id = ?
+            LIMIT 1
+        """, (order_id, product_id)).fetchone()
+
+        if existing_review:
+            return False, "You have already reviewed this product in this order."
+
+        # ----------------------------------
+        # SAVE REVIEW
+        # ----------------------------------
+
+        connection.execute("""
+            INSERT INTO product_reviews (
+                order_id,
+                customer_id,
+                product_id,
+                rating,
+                comment
+            )
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            order_id,
+            customer_id,
+            product_id,
+            rating,
+            comment,
+        ))
+
+        connection.commit()
+
+        return True, "Your product review was submitted successfully!"
+
+    except sqlite3.IntegrityError:
+        connection.rollback()
+        return False, "You have already reviewed this product in this order."
+
+    except Exception as error:
+        connection.rollback()
+        return False, f"Unable to submit review: {error}"
+
+    finally:
+        connection.close()
+
+
+# ==========================================
+# VIEW PRODUCT REVIEWS
+# ==========================================
+
+def view_product_reviews(product_id):
+    """
+    Retrieve all reviews for a product.
+
+    Returns reviews with customer name,
+    rating, comment, date, and order ID.
+    """
+
+    connection = get_connection()
+
+    try:
+        customer_columns = get_columns(connection, "customers")
+        customer_id_column = find_column(
+            customer_columns, "customer_id", "id"
+        )
+
+        if customer_id_column and "name" in customer_columns:
+            customer_join = (
+                f'LEFT JOIN customers c '
+                f'ON r.customer_id = c."{customer_id_column}"'
+            )
+            customer_name_expression = "c.name"
+        else:
+            customer_join = ""
+            customer_name_expression = "'Customer'"
+
+        query = f"""
+            SELECT
+                r.review_id,
+                r.order_id,
+                r.customer_id,
+                r.product_id,
+                r.rating,
+                r.comment,
+                r.created_at,
+                {customer_name_expression} AS customer_name
+            FROM product_reviews r
+            {customer_join}
+            WHERE r.product_id = ?
+            ORDER BY r.created_at DESC, r.review_id DESC
+        """
+
+        return connection.execute(
+            query, (product_id,)
+        ).fetchall()
+
+    finally:
+        connection.close()
+
+
+# ==========================================
+# PRODUCT RATING SUMMARY
+# ==========================================
+
+def get_product_rating_summary(product_id):
+    """
+    Return the average rating and total review count.
+
+    Returns:
+        {
+            'average_rating': float,
+            'total_reviews': int
+        }
+    """
+
+    connection = get_connection()
+
+    try:
+        result = connection.execute("""
+            SELECT
+                COALESCE(AVG(rating), 0) AS average_rating,
+                COUNT(*) AS total_reviews
+            FROM product_reviews
+            WHERE product_id = ?
+        """, (product_id,)).fetchone()
+
+        return {
+            "average_rating": round(
+                float(result["average_rating"]), 1
+            ),
+            "total_reviews": int(result["total_reviews"]),
+        }
+
+    finally:
+        connection.close()
+
+
+# ==========================================
+# VIEW CUSTOMER REVIEW HISTORY
+# ==========================================
+
+def view_customer_reviews(customer_id):
+    """Retrieve all reviews submitted by a customer."""
+
+    connection = get_connection()
+
+    try:
+        product_columns = get_columns(connection, "products")
+        product_id_column = find_column(
+            product_columns, "product_id", "id"
+        )
+
+        if not product_id_column:
+            raise RuntimeError(
+                "No product ID column was found."
+            )
+
+        query = f"""
+            SELECT
+                r.review_id,
+                r.order_id,
+                r.customer_id,
+                r.product_id,
+                r.rating,
+                r.comment,
+                r.created_at,
+                p.name AS product_name
+            FROM product_reviews r
+            LEFT JOIN products p
+                ON r.product_id = p."{product_id_column}"
+            WHERE r.customer_id = ?
+            ORDER BY r.created_at DESC, r.review_id DESC
+        """
+
+        return connection.execute(
+            query, (customer_id,)
+        ).fetchall()
+
+    finally:
+        connection.close()
+
+
+# ==========================================
 # RUN DATABASE FILE
 # ==========================================
 
@@ -513,3 +875,8 @@ if __name__ == "__main__":
             f"Total: PHP {order['total']:.2f} | "
             f"Status: {order['delivery_status']}"
         )
+
+    print("\nSHOP EASE PRODUCT REVIEWS")
+    print("-" * 60)
+
+    print("Product review table is ready.")

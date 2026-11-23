@@ -3,7 +3,6 @@ import sqlite3
 import qrcode
 import base64
 import secrets
-import json
 
 from io import BytesIO
 from functools import wraps
@@ -19,6 +18,10 @@ from database import (
     get_connection,
     view_orders,
     update_delivery_status,
+    submit_product_review,
+    view_product_reviews,
+    get_product_rating_summary,
+    get_review_for_order_product,
 )
 
 from models.payment import MockPayment
@@ -102,11 +105,6 @@ def get_order_total(order):
 
 
 def normalize_items(items):
-    """
-    Create a consistent order signature.
-    Example: [{"id": 1, "quantity": 2}]
-    """
-
     normalized = {}
 
     for item in items:
@@ -120,25 +118,124 @@ def normalize_items(items):
     return tuple(sorted(normalized.items()))
 
 
+# ==========================================
+# PUBLIC ORDER ID GENERATOR
+# ==========================================
+
+def generate_public_order_id(connection):
+    """
+    Generates a unique public Order ID.
+
+    Example:
+        SE-A83F91C2D4
+    """
+
+    order_columns = get_columns(connection, "orders")
+
+    if "public_order_id" not in order_columns:
+        raise RuntimeError(
+            "public_order_id is missing. Initialize the database first."
+        )
+
+    for _ in range(20):
+        public_id = "SE-" + secrets.token_hex(5).upper()
+
+        existing = connection.execute(
+            """
+            SELECT 1
+            FROM orders
+            WHERE public_order_id = ?
+            LIMIT 1
+            """,
+            (public_id,)
+        ).fetchone()
+
+        if not existing:
+            return public_id
+
+    raise RuntimeError("Unable to generate a unique Order ID.")
+
+
+# ==========================================
+# PUBLIC ORDER ID DATABASE MIGRATION
+# ==========================================
+
+def initialize_public_order_ids():
+    """
+    Adds public_order_id to the orders table,
+    fills existing orders, and creates a unique index.
+    """
+
+    connection = get_connection()
+
+    try:
+        with connection:
+
+            order_columns = get_columns(connection, "orders")
+
+            order_id_column = find_column(
+                order_columns, "order_id", "id"
+            )
+
+            if not order_id_column:
+                raise RuntimeError(
+                    "Orders table has no order ID column."
+                )
+
+            if "public_order_id" not in order_columns:
+                connection.execute(
+                    """
+                    ALTER TABLE orders
+                    ADD COLUMN public_order_id TEXT
+                    """
+                )
+
+            order_id_sql = quote_identifier(order_id_column)
+
+            rows = connection.execute(
+                f"""
+                SELECT {order_id_sql} AS internal_id
+                FROM orders
+                WHERE public_order_id IS NULL
+                   OR public_order_id = ''
+                """
+            ).fetchall()
+
+            for row in rows:
+                public_id = generate_public_order_id(connection)
+
+                connection.execute(
+                    f"""
+                    UPDATE orders
+                    SET public_order_id = ?
+                    WHERE {order_id_sql} = ?
+                    """,
+                    (public_id, row["internal_id"])
+                )
+
+            connection.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS
+                idx_orders_public_order_id
+                ON orders(public_order_id)
+                """
+            )
+
+    finally:
+        connection.close()
+
+
+# ==========================================
+# ORDER SIGNATURE / DUPLICATE HELPERS
+# ==========================================
+
 def get_order_signature(connection, order_id):
-    """
-    Return a consistent product/quantity signature
-    for an existing order.
-    """
 
-    item_columns = get_columns(connection, "order_items")
+    columns = get_columns(connection, "order_items")
 
-    order_column = find_column(
-        item_columns, "order_id"
-    )
-
-    product_column = find_column(
-        item_columns, "product_id"
-    )
-
-    quantity_column = find_column(
-        item_columns, "quantity"
-    )
+    order_column = find_column(columns, "order_id")
+    product_column = find_column(columns, "product_id")
+    quantity_column = find_column(columns, "quantity")
 
     if not all([
         order_column,
@@ -161,30 +258,25 @@ def get_order_signature(connection, order_id):
     if not rows:
         return None
 
-    items = [
+    return normalize_items([
         {
             "id": int(row["product_id"]),
             "quantity": int(row["quantity"]),
         }
         for row in rows
-    ]
-
-    return normalize_items(items)
+    ])
 
 
 def get_recent_order_ids(connection):
-    """
-    Retrieve orders placed within the duplicate window.
-    """
 
-    order_columns = get_columns(connection, "orders")
+    columns = get_columns(connection, "orders")
 
     order_id_column = find_column(
-        order_columns, "order_id", "id"
+        columns, "order_id", "id"
     )
 
     created_column = find_column(
-        order_columns, "created_at"
+        columns, "created_at"
     )
 
     if not order_id_column or not created_column:
@@ -204,16 +296,12 @@ def get_recent_order_ids(connection):
 
 
 def detect_dashboard_duplicates(connection, orders):
-    """
-    Flag matching recent orders on the admin dashboard.
-
-    This detection compares orders across customers.
-    """
 
     signatures = {}
     recent_ids = set(get_recent_order_ids(connection))
 
     for order in orders:
+
         order_id = get_order_id(order)
 
         if order_id not in recent_ids:
@@ -232,7 +320,6 @@ def detect_dashboard_duplicates(connection, orders):
     for order in orders:
 
         order_id = get_order_id(order)
-
         signature = signatures.get(order_id)
 
         if signature is None:
@@ -257,15 +344,7 @@ def detect_dashboard_duplicates(connection, orders):
     return duplicate_map
 
 
-def find_checkout_duplicate(
-    connection,
-    email,
-    cart_signature,
-):
-    """
-    Prevent the same customer from submitting
-    the exact same cart within five minutes.
-    """
+def find_checkout_duplicate(connection, email, cart_signature):
 
     order_columns = get_columns(connection, "orders")
     customer_columns = get_columns(connection, "customers")
@@ -295,11 +374,11 @@ def find_checkout_duplicate(
         order_customer_column,
         created_column,
         customer_id_column,
-        customer_email_column,
+        customer_email_column
     ]):
         return None
 
-    recent_orders = connection.execute(
+    rows = connection.execute(
         f"""
         SELECT
             o.{quote_identifier(order_id_column)} AS order_id
@@ -315,19 +394,128 @@ def find_checkout_duplicate(
         (email.lower(),)
     ).fetchall()
 
-    for row in recent_orders:
-
-        previous_order_id = row["order_id"]
+    for row in rows:
 
         previous_signature = get_order_signature(
-            connection, previous_order_id
+            connection, row["order_id"]
         )
 
         if previous_signature == cart_signature:
-
-            return previous_order_id
+            return row["order_id"]
 
     return None
+
+
+def get_public_order_id(connection, internal_order_id):
+
+    columns = get_columns(connection, "orders")
+
+    order_id_column = find_column(
+        columns, "order_id", "id"
+    )
+
+    if not order_id_column or "public_order_id" not in columns:
+        return None
+
+    row = connection.execute(
+        f"""
+        SELECT public_order_id
+        FROM orders
+        WHERE {quote_identifier(order_id_column)} = ?
+        LIMIT 1
+        """,
+        (internal_order_id,)
+    ).fetchone()
+
+    return row["public_order_id"] if row else None
+
+
+# ==========================================
+# ORDER TRACKING / REVIEW HELPERS
+# ==========================================
+
+def get_order_items_for_tracking(connection, order_id):
+
+    item_columns = get_columns(connection, "order_items")
+    product_columns = get_columns(connection, "products")
+
+    order_column = find_column(item_columns, "order_id")
+    item_product_column = find_column(item_columns, "product_id")
+    quantity_column = find_column(item_columns, "quantity")
+
+    product_id_column = find_column(
+        product_columns, "product_id", "id"
+    )
+
+    if not all([
+        order_column,
+        item_product_column,
+        quantity_column,
+        product_id_column,
+        "name" in product_columns
+    ]):
+        return []
+
+    rows = connection.execute(
+        f"""
+        SELECT
+            oi.{quote_identifier(item_product_column)} AS product_id,
+            oi.{quote_identifier(quantity_column)} AS quantity,
+            p.name AS product_name
+        FROM order_items oi
+        JOIN products p
+            ON p.{quote_identifier(product_id_column)}
+            = oi.{quote_identifier(item_product_column)}
+        WHERE oi.{quote_identifier(order_column)} = ?
+        ORDER BY p.name
+        """,
+        (order_id,)
+    ).fetchall()
+
+    result = []
+
+    for row in rows:
+
+        existing_review = get_review_for_order_product(
+            order_id, row["product_id"]
+        )
+
+        result.append({
+            "product_id": row["product_id"],
+            "product_name": row["product_name"],
+            "quantity": row["quantity"],
+            "reviewed": bool(existing_review),
+        })
+
+    return result
+
+
+def get_customer_name(connection, customer_id):
+
+    columns = get_columns(connection, "customers")
+
+    id_column = find_column(
+        columns, "customer_id", "id"
+    )
+
+    if (
+        not id_column
+        or "name" not in columns
+        or customer_id is None
+    ):
+        return "Guest"
+
+    row = connection.execute(
+        f"""
+        SELECT name
+        FROM customers
+        WHERE {quote_identifier(id_column)} = ?
+        LIMIT 1
+        """,
+        (customer_id,)
+    ).fetchone()
+
+    return row["name"] if row else "Guest"
 
 
 # ==========================================
@@ -360,11 +548,11 @@ def generate_tracking_qr(token):
     buffer = BytesIO()
     image.save(buffer, format="PNG")
 
-    qr_base64 = base64.b64encode(
+    encoded = base64.b64encode(
         buffer.getvalue()
     ).decode("utf-8")
 
-    return f"data:image/png;base64,{qr_base64}"
+    return f"data:image/png;base64,{encoded}"
 
 
 # ==========================================
@@ -408,17 +596,11 @@ def admin_login():
             session.clear()
             session["is_admin"] = True
 
-            flash(
-                "Welcome to ShopEase Admin!",
-                "success"
-            )
+            flash("Welcome to ShopEase Admin!", "success")
 
             return redirect(url_for("order_dashboard"))
 
-        flash(
-            "Invalid username or password.",
-            "error"
-        )
+        flash("Invalid username or password.", "error")
 
     return render_template("admin_login.html")
 
@@ -429,10 +611,7 @@ def admin_logout():
 
     session.clear()
 
-    flash(
-        "You have been logged out successfully.",
-        "success"
-    )
+    flash("You have been logged out successfully.", "success")
 
     return redirect(url_for("admin_login"))
 
@@ -448,9 +627,7 @@ def home():
 
     try:
 
-        columns = get_columns(
-            connection, "products"
-        )
+        columns = get_columns(connection, "products")
 
         product_id_column = find_column(
             columns, "product_id", "id"
@@ -463,7 +640,7 @@ def home():
 
         if not {"name", "price", "stock"}.issubset(columns):
             raise RuntimeError(
-                "The products table must contain name, price, and stock."
+                "Products table must contain name, price, and stock."
             )
 
         description_sql = (
@@ -472,28 +649,23 @@ def home():
             else "''"
         )
 
-        product_id_sql = quote_identifier(
-            product_id_column
-        )
+        id_sql = quote_identifier(product_id_column)
 
         products = connection.execute(
             f"""
             SELECT
-                {product_id_sql} AS id,
-                {product_id_sql} AS product_id,
+                {id_sql} AS id,
+                {id_sql} AS product_id,
                 name,
                 {description_sql} AS description,
                 price,
                 stock
             FROM products
-            ORDER BY {product_id_sql}
+            ORDER BY {id_sql}
             """
         ).fetchall()
 
-        products = [
-            row_to_dict(row)
-            for row in products
-        ]
+        products = [row_to_dict(row) for row in products]
 
         return render_template(
             "index.html",
@@ -506,15 +678,9 @@ def home():
         TypeError
     ):
 
-        app.logger.exception(
-            "Unable to load product catalog"
-        )
+        app.logger.exception("Unable to load product catalog")
 
-        return (
-            "Unable to load products. "
-            "Check your database.",
-            500
-        )
+        return "Unable to load products. Check your database.", 500
 
     finally:
         connection.close()
@@ -530,70 +696,129 @@ def cart_page():
 
 
 # ==========================================
-# CUSTOMER ORDER TRACKING
+# MANUAL ORDER TRACKING
 # ==========================================
 
-@app.route("/track-order")
+@app.route("/track-order", methods=["GET", "POST"])
 def track_order():
 
-    order_id = request.args.get(
-        "order_id", ""
-    ).strip()
-
-    order = None
     error = None
 
-    if order_id:
+    if request.method == "POST":
 
-        if not order_id.isdigit() or int(order_id) < 1:
+        public_order_id = request.form.get(
+            "order_id", ""
+        ).strip().upper()
 
-            error = "Please enter a valid order number."
+        email = request.form.get(
+            "email", ""
+        ).strip().lower()
+
+        if not public_order_id or not email:
+
+            error = "Please enter your Order ID and email address."
 
         else:
 
+            connection = get_connection()
+
             try:
 
-                orders = [
-                    row_to_dict(row)
-                    for row in view_orders()
+                order_columns = get_columns(
+                    connection, "orders"
+                )
+
+                customer_columns = get_columns(
+                    connection, "customers"
+                )
+
+                order_id_column = find_column(
+                    order_columns, "order_id", "id"
+                )
+
+                order_customer_column = find_column(
+                    order_columns, "customer_id"
+                )
+
+                customer_id_column = find_column(
+                    customer_columns, "customer_id", "id"
+                )
+
+                email_column = find_column(
+                    customer_columns, "email"
+                )
+
+                required = [
+                    order_id_column,
+                    order_customer_column,
+                    customer_id_column,
+                    email_column,
+                    "public_order_id",
+                    "tracking_token"
                 ]
 
-                order = next(
-                    (
-                        item for item in orders
-                        if str(get_order_id(item)) == order_id
-                    ),
-                    None
-                )
+                if not all(required):
 
-                if order is None:
                     error = (
-                        "Order not found. "
-                        "Please check your order number."
+                        "Manual tracking is unavailable. "
+                        "Database structure is incomplete."
                     )
 
-            except (
-                sqlite3.Error,
-                RuntimeError,
-                TypeError,
-                ValueError
-            ):
+                else:
 
-                app.logger.exception(
-                    "Order tracking failed"
-                )
+                    order = connection.execute(
+                        f"""
+                        SELECT
+                            o.{quote_identifier(order_id_column)} AS order_id,
+                            o.public_order_id,
+                            o.tracking_token
+                        FROM orders o
+                        JOIN customers c
+                            ON c.{quote_identifier(customer_id_column)}
+                            = o.{quote_identifier(order_customer_column)}
+                        WHERE upper(o.public_order_id) = ?
+                          AND lower(c.{quote_identifier(email_column)}) = ?
+                        LIMIT 1
+                        """,
+                        (public_order_id, email)
+                    ).fetchone()
 
-                error = (
-                    "Unable to load your order right now."
-                )
+                    if order and order["tracking_token"]:
+
+                        return redirect(
+                            url_for(
+                                "track_order_private",
+                                token=order["tracking_token"]
+                            )
+                        )
+
+                    error = (
+                        "Order not found. Please check "
+                        "your Order ID and email address."
+                    )
+
+            except sqlite3.Error:
+
+                app.logger.exception("Manual tracking failed")
+
+                error = "Unable to find your order right now."
+
+            finally:
+                connection.close()
 
     return render_template(
         "tracking.html",
-        order=order,
-        order_id=order_id,
+        order=None,
+        order_id="",
+        token=None,
+        order_items=[],
         error=error
     )
 
+
+# ==========================================
+# PRIVATE QR TRACKING
+# ==========================================
 
 @app.route("/track-order/<token>")
 def track_order_private(token):
@@ -602,39 +827,64 @@ def track_order_private(token):
 
     try:
 
-        order_columns = get_columns(
-            connection, "orders"
-        )
+        columns = get_columns(connection, "orders")
 
         order_id_column = find_column(
-            order_columns, "order_id", "id"
+            columns, "order_id", "id"
         )
 
         total_column = find_column(
-            order_columns, "total", "total_amount"
+            columns, "total", "total_amount"
         )
 
-        if (
-            "tracking_token" not in order_columns
-            or not order_id_column
-            or not total_column
-        ):
+        customer_id_column = find_column(
+            columns, "customer_id"
+        )
+
+        public_id_column = find_column(
+            columns, "public_order_id"
+        )
+
+        if not all([
+            "tracking_token" in columns,
+            order_id_column,
+            total_column,
+            customer_id_column,
+            public_id_column,
+            "delivery_status" in columns
+        ]):
 
             return render_template(
                 "tracking.html",
                 order=None,
                 order_id="",
+                token=None,
+                order_items=[],
                 error="Tracking information is unavailable."
             )
+
+        status_sql = (
+            quote_identifier("status")
+            if "status" in columns
+            else "'Completed (Mock)'"
+        )
+
+        created_sql = (
+            quote_identifier("created_at")
+            if "created_at" in columns
+            else "NULL"
+        )
 
         order = connection.execute(
             f"""
             SELECT
                 o.{quote_identifier(order_id_column)} AS order_id,
+                o.{quote_identifier(public_id_column)} AS public_order_id,
                 o.{quote_identifier(total_column)} AS total,
-                o.status AS status,
+                o.{status_sql} AS status,
                 o.delivery_status AS delivery_status,
-                o.created_at AS created_at
+                o.{created_sql} AS created_at,
+                o.{quote_identifier(customer_id_column)} AS customer_id
             FROM orders o
             WHERE o.tracking_token = ?
             LIMIT 1
@@ -648,19 +898,403 @@ def track_order_private(token):
                 "tracking.html",
                 order=None,
                 order_id="",
+                token=None,
+                order_items=[],
                 error="Invalid or unavailable tracking link."
             )
 
+        order_dict = row_to_dict(order)
+
+        order_dict["customer_name"] = get_customer_name(
+            connection, order["customer_id"]
+        )
+
+        order_items = get_order_items_for_tracking(
+            connection, order["order_id"]
+        )
+
         return render_template(
             "tracking.html",
-            order=order,
-            order_id=order["order_id"],
+            order=order_dict,
+            order_id=order["public_order_id"],
+            token=token,
+            order_items=order_items,
             error=None
         )
+
+    except (
+        sqlite3.Error,
+        RuntimeError,
+        TypeError,
+        ValueError
+    ):
+
+        app.logger.exception("Private tracking failed")
+
+        return render_template(
+            "tracking.html",
+            order=None,
+            order_id="",
+            token=None,
+            order_items=[],
+            error="Unable to load your order right now."
+        ), 500
 
     finally:
         connection.close()
 
+
+# ==========================================
+# CUSTOMER PRODUCT REVIEW
+# ==========================================
+
+@app.route(
+    "/review/<token>/<int:product_id>",
+    methods=["GET", "POST"]
+)
+def submit_review_page(token, product_id):
+
+    connection = get_connection()
+
+    try:
+
+        order_columns = get_columns(
+            connection, "orders"
+        )
+
+        product_columns = get_columns(
+            connection, "products"
+        )
+
+        item_columns = get_columns(
+            connection, "order_items"
+        )
+
+        order_id_column = find_column(
+            order_columns, "order_id", "id"
+        )
+
+        customer_id_column = find_column(
+            order_columns, "customer_id"
+        )
+
+        product_id_column = find_column(
+            product_columns, "product_id", "id"
+        )
+
+        item_order_column = find_column(
+            item_columns, "order_id"
+        )
+
+        item_product_column = find_column(
+            item_columns, "product_id"
+        )
+
+        if not all([
+            order_id_column,
+            customer_id_column,
+            product_id_column,
+            item_order_column,
+            item_product_column,
+            "tracking_token" in order_columns,
+            "delivery_status" in order_columns
+        ]):
+
+            return "Review database structure is incomplete.", 500
+
+        order = connection.execute(
+            f"""
+            SELECT
+                {quote_identifier(order_id_column)} AS order_id,
+                {quote_identifier(customer_id_column)} AS customer_id,
+                delivery_status,
+                tracking_token
+            FROM orders
+            WHERE tracking_token = ?
+            LIMIT 1
+            """,
+            (token,)
+        ).fetchone()
+
+        if not order:
+            return "Invalid or unavailable tracking link.", 404
+
+        if str(order["delivery_status"]).lower() != "delivered":
+
+            flash(
+                "You can only review products from delivered orders.",
+                "error"
+            )
+
+            return redirect(
+                url_for("track_order_private", token=token)
+            )
+
+        order_id = order["order_id"]
+        customer_id = order["customer_id"]
+
+        purchased = connection.execute(
+            f"""
+            SELECT 1
+            FROM order_items
+            WHERE {quote_identifier(item_order_column)} = ?
+              AND {quote_identifier(item_product_column)} = ?
+            LIMIT 1
+            """,
+            (order_id, product_id)
+        ).fetchone()
+
+        if not purchased:
+            return "This product was not part of this order.", 403
+
+        product = connection.execute(
+            f"""
+            SELECT
+                {quote_identifier(product_id_column)} AS product_id,
+                name,
+                price
+            FROM products
+            WHERE {quote_identifier(product_id_column)} = ?
+            LIMIT 1
+            """,
+            (product_id,)
+        ).fetchone()
+
+        if not product:
+            return "Product not found.", 404
+
+        existing_review = get_review_for_order_product(
+            order_id, product_id
+        )
+
+        if existing_review:
+
+            flash(
+                "You have already reviewed this product.",
+                "error"
+            )
+
+            return redirect(
+                url_for("track_order_private", token=token)
+            )
+
+        if request.method == "POST":
+
+            rating = request.form.get("rating", "")
+            comment = request.form.get("comment", "")
+
+            success, message = submit_product_review(
+                order_id=order_id,
+                customer_id=customer_id,
+                product_id=product_id,
+                rating=rating,
+                comment=comment
+            )
+
+            if success:
+
+                flash(message, "success")
+
+                return redirect(
+                    url_for("track_order_private", token=token)
+                )
+
+            flash(message, "error")
+
+        return render_template(
+            "review_form.html",
+            product=product,
+            order_id=order_id,
+            token=token
+        )
+
+    except (
+        sqlite3.Error,
+        RuntimeError,
+        TypeError,
+        ValueError
+    ):
+
+        app.logger.exception("Review page failed")
+
+        return "Unable to load the review form.", 500
+
+    finally:
+        connection.close()
+
+
+# ==========================================
+# VIEW PRODUCT REVIEWS
+# ==========================================
+
+@app.route("/product/<int:product_id>/reviews")
+def product_reviews_page(product_id):
+
+    connection = get_connection()
+
+    try:
+
+        columns = get_columns(connection, "products")
+
+        product_id_column = find_column(
+            columns, "product_id", "id"
+        )
+
+        if not product_id_column:
+            return "Product database structure is incomplete.", 500
+
+        product = connection.execute(
+            f"""
+            SELECT
+                {quote_identifier(product_id_column)} AS product_id,
+                name,
+                price
+            FROM products
+            WHERE {quote_identifier(product_id_column)} = ?
+            """,
+            (product_id,)
+        ).fetchone()
+
+        if not product:
+            return "Product not found.", 404
+
+        product = row_to_dict(product)
+
+    finally:
+        connection.close()
+
+    reviews = view_product_reviews(product_id)
+
+    rating_summary = get_product_rating_summary(product_id)
+
+    return render_template(
+        "reviews.html",
+        product=product,
+        reviews=reviews,
+        rating_summary=rating_summary
+    )
+# ==========================================
+# ADMIN CUSTOMER REVIEWS & RATINGS
+# ==========================================
+
+@app.route("/admin/reviews")
+@admin_required
+def admin_reviews():
+
+    connection = get_connection()
+
+    try:
+
+        columns = get_columns(connection, "products")
+
+        product_id_column = find_column(
+            columns, "product_id", "id"
+        )
+
+        if not product_id_column or "name" not in columns:
+            raise RuntimeError(
+                "Products table is missing required columns."
+            )
+
+        products = connection.execute(
+            f"""
+            SELECT
+                {quote_identifier(product_id_column)} AS product_id,
+                name
+            FROM products
+            ORDER BY name
+            """
+        ).fetchall()
+
+        products = [
+            row_to_dict(product)
+            for product in products
+        ]
+
+    except (
+        sqlite3.Error,
+        RuntimeError,
+        TypeError
+    ):
+
+        app.logger.exception(
+            "Unable to load admin reviews page"
+        )
+
+        flash(
+            "Unable to load products for reviews.",
+            "error"
+        )
+
+        return redirect(url_for("order_dashboard"))
+
+    finally:
+        connection.close()
+
+    all_reviews = []
+    product_rating_data = []
+
+    total_reviews = 0
+    total_rating_points = 0
+
+    for product in products:
+
+        product_id = product["product_id"]
+
+        reviews = view_product_reviews(product_id)
+
+        rating_summary = get_product_rating_summary(
+            product_id
+        )
+
+        product_review_count = len(reviews)
+
+        # ----------------------------------
+        # PRODUCT RATING SUMMARY
+        # ----------------------------------
+
+        product_rating_data.append({
+            "product_id": product_id,
+            "product_name": product["name"],
+            "rating_summary": rating_summary,
+            "review_count": product_review_count
+        })
+
+        # ----------------------------------
+        # COLLECT ALL CUSTOMER REVIEWS
+        # ----------------------------------
+
+        for review in reviews:
+
+            if isinstance(review, sqlite3.Row):
+                review = dict(review)
+
+            elif not isinstance(review, dict):
+                continue
+
+            review["product_name"] = product["name"]
+
+            all_reviews.append(review)
+
+        total_reviews += product_review_count
+
+    # ----------------------------------
+    # SORT REVIEWS
+    # ----------------------------------
+
+    all_reviews.sort(
+        key=lambda review: str(
+            review.get("created_at", "")
+        ),
+        reverse=True
+    )
+
+    return render_template(
+        "admin_reviews.html",
+        reviews=all_reviews,
+        products=product_rating_data,
+        total_reviews=total_reviews
+    )
 
 # ==========================================
 # ADMIN ORDER DASHBOARD
@@ -679,11 +1313,37 @@ def order_dashboard():
             for row in view_orders()
         ]
 
+        columns = get_columns(connection, "orders")
+
+        order_id_column = find_column(
+            columns, "order_id", "id"
+        )
+
+        if "public_order_id" in columns and order_id_column:
+
+            id_sql = quote_identifier(order_id_column)
+
+            for order in orders:
+
+                internal_id = get_order_id(order)
+
+                row = connection.execute(
+                    f"""
+                    SELECT public_order_id
+                    FROM orders
+                    WHERE {id_sql} = ?
+                    """,
+                    (internal_id,)
+                ).fetchone()
+
+                order["public_order_id"] = (
+                    row["public_order_id"] if row else None
+                )
+
         duplicate_map = detect_dashboard_duplicates(
             connection, orders
         )
 
-        # Add duplicate information to each order.
         for order in orders:
 
             order_id = get_order_id(order)
@@ -692,7 +1352,7 @@ def order_dashboard():
                 order_id,
                 {
                     "duplicate": False,
-                    "duplicate_of": None,
+                    "duplicate_of": None
                 }
             )
 
@@ -706,9 +1366,7 @@ def order_dashboard():
         ValueError
     ):
 
-        app.logger.exception(
-            "Could not load order dashboard"
-        )
+        app.logger.exception("Order dashboard failed")
 
         orders = []
 
@@ -726,7 +1384,7 @@ def order_dashboard():
         "processing": 0,
         "shipped": 0,
         "delivered": 0,
-        "cancelled": 0,
+        "cancelled": 0
     }
 
     for order in orders:
@@ -747,7 +1405,7 @@ def order_dashboard():
 
 
 # ==========================================
-# UPDATE ORDER DELIVERY STATUS
+# UPDATE DELIVERY STATUS
 # ==========================================
 
 @app.route(
@@ -763,14 +1421,9 @@ def update_order_status(order_id):
 
     if new_status not in DELIVERY_STATUSES:
 
-        flash(
-            "Invalid delivery status.",
-            "error"
-        )
+        flash("Invalid delivery status.", "error")
 
-        return redirect(
-            url_for("order_dashboard")
-        )
+        return redirect(url_for("order_dashboard"))
 
     try:
 
@@ -798,18 +1451,11 @@ def update_order_status(order_id):
         RuntimeError
     ):
 
-        app.logger.exception(
-            "Could not update delivery status"
-        )
+        app.logger.exception("Status update failed")
 
-        flash(
-            "Unable to update delivery status.",
-            "error"
-        )
+        flash("Unable to update delivery status.", "error")
 
-    return redirect(
-        url_for("order_dashboard")
-    )
+    return redirect(url_for("order_dashboard"))
 
 
 # ==========================================
@@ -824,30 +1470,26 @@ def restock_products():
 
     try:
 
-        product_columns = get_columns(
-            connection, "products"
-        )
+        columns = get_columns(connection, "products")
 
         product_id_column = find_column(
-            product_columns, "product_id", "id"
+            columns, "product_id", "id"
         )
 
         if (
             not product_id_column
-            or not {"name", "price", "stock"}.issubset(product_columns)
+            or not {"name", "price", "stock"}.issubset(columns)
         ):
 
             raise RuntimeError(
-                "The products table must contain ID, name, price, and stock."
+                "Products table must contain ID, name, price, and stock."
             )
 
-        product_id_sql = quote_identifier(
-            product_id_column
-        )
+        id_sql = quote_identifier(product_id_column)
 
         if request.method == "POST":
 
-            product_id = request.form.get(
+            product_id_text = request.form.get(
                 "product_id", ""
             ).strip()
 
@@ -857,7 +1499,7 @@ def restock_products():
 
             try:
 
-                product_id = int(product_id)
+                product_id = int(product_id_text)
                 quantity = int(quantity_text)
 
                 if product_id <= 0 or quantity <= 0:
@@ -870,9 +1512,7 @@ def restock_products():
                     "error"
                 )
 
-                return redirect(
-                    url_for("restock_products")
-                )
+                return redirect(url_for("restock_products"))
 
             with connection:
 
@@ -880,17 +1520,14 @@ def restock_products():
                     f"""
                     UPDATE products
                     SET stock = stock + ?
-                    WHERE {product_id_sql} = ?
+                    WHERE {id_sql} = ?
                     """,
                     (quantity, product_id)
                 )
 
                 if result.rowcount != 1:
 
-                    flash(
-                        "Product not found.",
-                        "error"
-                    )
+                    flash("Product not found.", "error")
 
                 else:
 
@@ -898,7 +1535,7 @@ def restock_products():
                         f"""
                         SELECT name, stock
                         FROM products
-                        WHERE {product_id_sql} = ?
+                        WHERE {id_sql} = ?
                         """,
                         (product_id,)
                     ).fetchone()
@@ -909,14 +1546,12 @@ def restock_products():
                         "success"
                     )
 
-            return redirect(
-                url_for("restock_products")
-            )
+            return redirect(url_for("restock_products"))
 
         products = connection.execute(
             f"""
             SELECT
-                {product_id_sql} AS id,
+                {id_sql} AS id,
                 name,
                 price,
                 stock
@@ -936,18 +1571,11 @@ def restock_products():
         TypeError
     ):
 
-        app.logger.exception(
-            "Restock page or inventory update failed"
-        )
+        app.logger.exception("Restocking failed")
 
-        flash(
-            "Unable to load or update inventory.",
-            "error"
-        )
+        flash("Unable to load or update inventory.", "error")
 
-        return redirect(
-            url_for("order_dashboard")
-        )
+        return redirect(url_for("order_dashboard"))
 
     finally:
         connection.close()
@@ -968,22 +1596,14 @@ def checkout():
             "error": "Invalid checkout request."
         }), 400
 
-    name = str(
-        data.get("name", "")
-    ).strip()
-
-    email = str(
-        data.get("email", "")
-    ).strip().lower()
-
-    phone = str(
-        data.get("phone", "")
-    ).strip()
+    name = str(data.get("name", "")).strip()
+    email = str(data.get("email", "")).strip().lower()
+    phone = str(data.get("phone", "")).strip()
 
     items = data.get("items", [])
 
     # ----------------------------------
-    # VALIDATE CUSTOMER INFORMATION
+    # VALIDATE CUSTOMER
     # ----------------------------------
 
     if (
@@ -1008,7 +1628,7 @@ def checkout():
         }), 400
 
     # ----------------------------------
-    # VALIDATE CART ITEMS
+    # VALIDATE CART
     # ----------------------------------
 
     if not isinstance(items, list) or not items:
@@ -1054,25 +1674,19 @@ def checkout():
                 "error": "Requested quantity is too large."
             }), 400
 
-    cart_signature = normalize_items(
-        [
-            {
-                "id": product_id,
-                "quantity": quantity,
-            }
-            for product_id, quantity in quantities.items()
-        ]
-    )
+    cart_signature = normalize_items([
+        {
+            "id": product_id,
+            "quantity": quantity
+        }
+        for product_id, quantity in quantities.items()
+    ])
 
     connection = get_connection()
 
     try:
 
         with connection:
-
-            # ----------------------------------
-            # DETECT DATABASE COLUMNS
-            # ----------------------------------
 
             product_columns = get_columns(
                 connection, "products"
@@ -1126,7 +1740,7 @@ def checkout():
                 item_columns, "subtotal"
             )
 
-            required_columns = [
+            required = [
                 product_id_column,
                 customer_id_column,
                 order_customer_column,
@@ -1135,12 +1749,15 @@ def checkout():
                 item_product_id_column,
                 item_quantity_column,
                 item_price_column,
+                "public_order_id",
+                "tracking_token"
             ]
 
-            if not all(required_columns):
+            if not all(required):
 
                 raise RuntimeError(
-                    "A required database column is missing."
+                    "A required database column is missing. "
+                    "Initialize the database and Order ID migration."
                 )
 
             if not {"name", "price", "stock"}.issubset(
@@ -1148,7 +1765,7 @@ def checkout():
             ):
 
                 raise RuntimeError(
-                    "The products table needs name, price, and stock."
+                    "Products table needs name, price, and stock."
                 )
 
             if not {"name", "email"}.issubset(
@@ -1156,34 +1773,36 @@ def checkout():
             ):
 
                 raise RuntimeError(
-                    "The customers table needs name and email."
+                    "Customers table needs name and email."
                 )
 
             # ----------------------------------
-            # DUPLICATE CHECK - BEFORE PAYMENT
+            # DUPLICATE ORDER CHECK
             # ----------------------------------
 
             duplicate_order_id = find_checkout_duplicate(
-                connection,
-                email,
-                cart_signature
+                connection, email, cart_signature
             )
 
             if duplicate_order_id:
 
+                duplicate_public_id = get_public_order_id(
+                    connection, duplicate_order_id
+                )
+
                 return jsonify({
                     "error": (
-                        "Duplicate order detected! "
-                        f"You already placed the same order recently "
-                        f"(Order #{duplicate_order_id}). "
+                        "Duplicate order detected! You already placed "
+                        "the same order recently "
+                        f"({duplicate_public_id or 'previous order'}). "
                         "Please wait before submitting it again."
                     ),
                     "duplicate": True,
-                    "duplicate_order_id": duplicate_order_id,
+                    "duplicate_order_id": duplicate_public_id
                 }), 409
 
             # ----------------------------------
-            # CHECK PRODUCTS, PRICES, AND STOCK
+            # VALIDATE PRODUCTS / STOCK
             # ----------------------------------
 
             total = 0.0
@@ -1223,9 +1842,7 @@ def checkout():
                         f"Invalid price for {product['name']}."
                     )
 
-                subtotal = round(
-                    price * quantity, 2
-                )
+                subtotal = round(price * quantity, 2)
 
                 total += subtotal
 
@@ -1234,16 +1851,13 @@ def checkout():
                     "name": product["name"],
                     "quantity": quantity,
                     "price": price,
-                    "subtotal": subtotal,
+                    "subtotal": subtotal
                 })
 
             total = round(total, 2)
 
             if total <= 0:
-
-                raise ValueError(
-                    "The order total must be greater than zero."
-                )
+                raise ValueError("Order total must be greater than zero.")
 
             # ----------------------------------
             # FIND OR CREATE CUSTOMER
@@ -1260,20 +1874,16 @@ def checkout():
 
             if customer:
 
-                customer_id = customer[
-                    customer_id_column
-                ]
+                customer_id = customer[customer_id_column]
 
                 updates = []
                 values = []
 
                 if "name" in customer_columns:
-
                     updates.append('"name" = ?')
                     values.append(name)
 
                 if "phone" in customer_columns:
-
                     updates.append('"phone" = ?')
                     values.append(phone)
 
@@ -1292,16 +1902,10 @@ def checkout():
 
             else:
 
-                insert_columns = [
-                    "name", "email"
-                ]
-
-                insert_values = [
-                    name, email
-                ]
+                insert_columns = ["name", "email"]
+                insert_values = [name, email]
 
                 if "phone" in customer_columns:
-
                     insert_columns.append("phone")
                     insert_values.append(phone)
 
@@ -1336,41 +1940,40 @@ def checkout():
                 )
 
             # ----------------------------------
+            # GENERATE PUBLIC ID / TOKEN
+            # ----------------------------------
+
+            public_order_id = generate_public_order_id(
+                connection
+            )
+
+            tracking_token = secrets.token_urlsafe(32)
+
+            # ----------------------------------
             # CREATE ORDER
             # ----------------------------------
 
             order_insert_columns = [
                 order_customer_column,
                 order_total_column,
+                "public_order_id",
+                "tracking_token"
             ]
 
             order_values = [
                 customer_id,
                 total,
+                public_order_id,
+                tracking_token
             ]
 
-            tracking_token = secrets.token_urlsafe(32)
-
             if "status" in order_columns:
-
                 order_insert_columns.append("status")
                 order_values.append("Completed (Mock)")
 
             if "delivery_status" in order_columns:
-
-                order_insert_columns.append(
-                    "delivery_status"
-                )
-
+                order_insert_columns.append("delivery_status")
                 order_values.append("Processing")
-
-            if "tracking_token" in order_columns:
-
-                order_insert_columns.append(
-                    "tracking_token"
-                )
-
-                order_values.append(tracking_token)
 
             placeholders = ", ".join(
                 "?" for _ in order_values
@@ -1391,7 +1994,7 @@ def checkout():
             order_id = cursor.lastrowid
 
             # ----------------------------------
-            # SAVE ORDER ITEMS AND UPDATE STOCK
+            # SAVE ITEMS / UPDATE INVENTORY
             # ----------------------------------
 
             for item in checked_items:
@@ -1400,14 +2003,14 @@ def checkout():
                     item_order_id_column,
                     item_product_id_column,
                     item_quantity_column,
-                    item_price_column,
+                    item_price_column
                 ]
 
                 item_values = [
                     order_id,
                     item["id"],
                     item["quantity"],
-                    item["price"],
+                    item["price"]
                 ]
 
                 if item_subtotal_column:
@@ -1416,9 +2019,7 @@ def checkout():
                         item_subtotal_column
                     )
 
-                    item_values.append(
-                        item["subtotal"]
-                    )
+                    item_values.append(item["subtotal"])
 
                 placeholders = ", ".join(
                     "?" for _ in item_values
@@ -1446,7 +2047,7 @@ def checkout():
                     (
                         item["quantity"],
                         item["id"],
-                        item["quantity"],
+                        item["quantity"]
                     )
                 )
 
@@ -1460,41 +2061,27 @@ def checkout():
         # TRANSACTION COMMITTED
         # ----------------------------------
 
-        if tracking_token:
+        tracking_url = url_for(
+            "track_order_private",
+            token=tracking_token,
+            _external=True
+        )
 
-            tracking_url = url_for(
-                "track_order_private",
-                token=tracking_token,
-                _external=True
-            )
-
-            qr_code = generate_tracking_qr(
-                tracking_token
-            )
-
-        else:
-
-            tracking_url = url_for(
-                "track_order",
-                order_id=order_id,
-                _external=True
-            )
-
-            qr_code = None
-
-        # ----------------------------------
-        # CHECKOUT SUCCESS
-        # ----------------------------------
+        qr_code = generate_tracking_qr(
+            tracking_token
+        )
 
         return jsonify({
             "message": "Order placed successfully!",
-            "order_id": order_id,
+            "order_id": public_order_id,
+            "public_order_id": public_order_id,
+            "internal_order_id": order_id,
             "total": total,
             "status": "Completed (Mock)",
             "delivery_status": "Processing",
             "tracking_url": tracking_url,
             "qr_url": qr_code,
-            "qr_code": qr_code,
+            "qr_code": qr_code
         }), 201
 
     except ValueError as error:
@@ -1511,9 +2098,7 @@ def checkout():
         OverflowError
     ):
 
-        app.logger.exception(
-            "Checkout failed"
-        )
+        app.logger.exception("Checkout failed")
 
         return jsonify({
             "error": (
@@ -1523,7 +2108,6 @@ def checkout():
         }), 500
 
     finally:
-
         connection.close()
 
 
@@ -1534,6 +2118,9 @@ def checkout():
 if __name__ == "__main__":
 
     initialize_database()
+
+    initialize_public_order_ids()
+
     seed_products()
 
     app.run(debug=True)
